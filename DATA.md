@@ -2,7 +2,160 @@ Here is a complete project blueprint. You can copy and paste this directly into 
 
 ***
 
-# 🛡️ Proof: Self-Hosted LLM Evaluation & Regression Testing
+# Proof — Build Plan
+
+> **The Golden Rule: Make it work → Make it right → Make it fast.**
+>
+> You're currently at "make it work." Don't worry about speed, scale, or a
+> beautiful UI until the core loop is solid.
+
+Here is the exact order you should build **Proof**, designed so you have
+something **working and visible after Day 1**.
+
+> **The #1 rule: Do not touch the frontend until Phase 4.**
+
+---
+
+## 🎯 Phase 1: The Core Loop (Days 1-3) — BUILD THIS FIRST
+
+**Goal:** A Python script in your terminal that runs 5 questions through an LLM,
+judges them, and prints a score. **No UI. No database. No web app.**
+
+### Day 1: The Runner
+
+Create a file called `runner.py`:
+
+```python
+# Hardcode 5 test questions
+questions = [
+    "What is the capital of France?",
+    "Explain quantum physics in 3 words",
+    # ...
+]
+
+# Send each to an LLM (OpenAI, Claude, etc.)
+# Save the answers to a list
+```
+
+✅ **Day 1 deliverable:** You can run `python runner.py` and see 5 AI answers
+printed in your terminal.
+
+### Day 2: The Judge
+
+Create `judge.py`:
+
+- Take each `(question, answer)` pair
+- Send it to a "Judge" LLM (GPT-4o-mini is cheap) with a prompt like:
+  > *"Rate this answer 1-5 for accuracy. Reply ONLY with a JSON: {\"score\": X, \"reason\": \"...\"}"*
+- Parse the JSON response
+- Calculate the average score
+
+✅ **Day 2 deliverable:** Running the script now prints: `Score: 4.2/5` with
+reasons for each.
+
+### Day 3: Make it a CLI tool
+
+Use Python's `Typer` or `Click` library:
+
+```bash
+proof run --questions test.csv --prompt "You are a helpful assistant"
+```
+
+✅ **Day 3 deliverable:** A real CLI tool you can run from your terminal.
+**This is your MVP.**
+
+---
+
+## 📊 Phase 2: Persistence (Days 4-6)
+
+**Goal:** Save your runs so you can compare them later.
+
+- Set up a simple **SQLite** database (don't use Postgres yet, SQLite is easier)
+- Create 3 tables: `Datasets`, `Runs`, `Results`
+- Modify your CLI so every run saves to the database
+- Add a command: `proof compare run_1 run_2` that prints the difference
+
+✅ **Deliverable:** You can run multiple evals and compare them in the terminal.
+
+---
+
+## 🎨 Phase 3: The Web Dashboard (Days 7-14)
+
+**Only start this AFTER Phase 1 & 2 work perfectly.**
+
+- **Backend:** FastAPI with endpoints like `/runs`, `/datasets`, `/compare`
+- **Frontend:** Next.js + Tailwind + Shadcn UI
+- **Pages to build (in order):**
+  1. Upload CSV page (dataset creation)
+  2. Run evaluation page (select dataset + prompt)
+  3. Results page (see all answers + scores)
+  4. Compare page (side-by-side two runs)
+
+✅ **Deliverable:** A beautiful web app you can show your friends.
+
+---
+
+## 🚀 Phase 4: The "Killer Features" (Weeks 3-4)
+
+This is what makes Proof special:
+
+1. **Concurrency:** Use `asyncio` + `arq` to run 100 evals in parallel instead of
+   one by one
+2. **Rule-based scorers:** Add regex, JSON schema validation, word count checks
+3. **GitHub Action:** Create a `.github/workflows/proof.yml` so teams can run
+   evals on every PR
+4. **Quality thresholds:** Block deploys if score drops below X%
+
+---
+
+## 🛠️ Tech Stack (Keep it simple!)
+
+| Layer | Choice | Why |
+|---|---|---|
+| Language | **Python** | Best LLM ecosystem |
+| CLI | **Typer** | Dead simple |
+| DB (start) | **SQLite** | Zero setup |
+| DB (later) | **PostgreSQL** | For production |
+| Backend | **FastAPI** | Fast, modern |
+| Frontend | **Next.js + Shadcn** | Beautiful by default |
+| LLM API | **OpenAI** | Start here, add others later |
+
+---
+
+## ⚠️ The 3 Traps to Avoid
+
+1. **❌ Building the UI first.** You'll spend 2 weeks on buttons and have no
+   working product.
+2. **❌ Over-engineering the database.** SQLite is fine for months. Don't design
+   a perfect schema upfront.
+3. **❌ Supporting 10 LLM providers at once.** Start with OpenAI only. Add
+   Claude/Anthropic in Week 3.
+
+---
+
+## 📅 Your Action Plan for TODAY
+
+Do this in the next 2 hours:
+
+1. Create a GitHub repo called `proof`
+2. Create a virtual environment: `python -m venv venv`
+3. Install: `pip install openai typer`
+4. Write `runner.py` with 5 hardcoded questions
+5. Run it and see 5 AI answers in your terminal
+
+**That's it.** Once you see those 5 answers, you've started. The rest is just
+iteration.
+
+---
+
+# 📎 Appendix: Original Product Blueprint
+
+*The strategy document this build plan was derived from. Kept for reference —
+see "Phase 1: MVP Milestones" at the bottom for the 4-week schedule.*
+
+---
+
+## 🛡️ Proof: Self-Hosted LLM Evaluation & Regression Testing
 
 **Tagline:** *Jest for LLMs. Catch AI regressions before they reach production.*
 
