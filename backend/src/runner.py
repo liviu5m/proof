@@ -22,5 +22,6 @@ def run_tests(questions, prompt, model):
             "response": interaction.output_text,
             "expected": q["expected"]
         })
+
     return data
 

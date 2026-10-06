@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlmodel import Field, SQLModel
 from typing import Optional
 
@@ -10,7 +10,7 @@ class Datasets(SQLModel, table=True):
     source_path: str = Field(nullable=False)
     item_count: int = Field(nullable=False, default=0)
     hash: str = Field(nullable=False)
-    createdAt: datetime = Field(default_factory=datetime.now, nullable=False)
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
 class Runs(SQLModel, table=True):
     __tablename__ = "runs"
@@ -21,10 +21,7 @@ class Runs(SQLModel, table=True):
     judge_model: str = Field(nullable=False)
     avg_score: Optional[float] = Field(default=None)
     total: int = Field(nullable=False)
-    passed: int = Field(nullable=False, default=0)
-    duration_ms: Optional[int] = Field(default=None)
-    git_sha: Optional[str] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.now, nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
 class Results(SQLModel, table=True):
     __tablename__ = "results"
