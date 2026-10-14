@@ -1,6 +1,6 @@
 Here is a complete project blueprint. You can copy and paste this directly into a `README.md` file in your GitHub repository, or into a Notion/Linear document to guide your development.
 
-***
+---
 
 # Proof — Build Plan
 
@@ -46,7 +46,7 @@ Create `judge.py`:
 
 - Take each `(question, answer)` pair
 - Send it to a "Judge" LLM (GPT-4o-mini is cheap) with a prompt like:
-  > *"Rate this answer 1-5 for accuracy. Reply ONLY with a JSON: {\"score\": X, \"reason\": \"...\"}"*
+  > _"Rate this answer 1-5 for accuracy. Reply ONLY with a JSON: {\"score\": X, \"reason\": \"...\"}"_
 - Parse the JSON response
 - Calculate the average score
 
@@ -83,9 +83,7 @@ proof run --questions test.csv --prompt "You are a helpful assistant"
 
 **Only start this AFTER Phase 1 & 2 work perfectly.**
 
-- **Backend:** FastAPI with endpoints like `/runs`, `/datasets`, `/compare`
-- **Frontend:** Next.js + Tailwind + Shadcn UI
-- **Pages to build (in order):**
+- **Backend:** FastAPI with endpoints like `/runs`, `/datasets`, `/compare` **Frontend:** Next.js + Tailwind + Shadcn UI **Pages to build (in order):**
   1. Upload CSV page (dataset creation)
   2. Run evaluation page (select dataset + prompt)
   3. Results page (see all answers + scores)
@@ -110,15 +108,15 @@ This is what makes Proof special:
 
 ## 🛠️ Tech Stack (Keep it simple!)
 
-| Layer | Choice | Why |
-|---|---|---|
-| Language | **Python** | Best LLM ecosystem |
-| CLI | **Typer** | Dead simple |
-| DB (start) | **SQLite** | Zero setup |
-| DB (later) | **PostgreSQL** | For production |
-| Backend | **FastAPI** | Fast, modern |
-| Frontend | **Next.js + Shadcn** | Beautiful by default |
-| LLM API | **OpenAI** | Start here, add others later |
+| Layer      | Choice               | Why                          |
+| ---------- | -------------------- | ---------------------------- |
+| Language   | **Python**           | Best LLM ecosystem           |
+| CLI        | **Typer**            | Dead simple                  |
+| DB (start) | **SQLite**           | Zero setup                   |
+| DB (later) | **PostgreSQL**       | For production               |
+| Backend    | **FastAPI**          | Fast, modern                 |
+| Frontend   | **Next.js + Shadcn** | Beautiful by default         |
+| LLM API    | **OpenAI**           | Start here, add others later |
 
 ---
 
@@ -150,20 +148,22 @@ iteration.
 
 # 📎 Appendix: Original Product Blueprint
 
-*The strategy document this build plan was derived from. Kept for reference —
-see "Phase 1: MVP Milestones" at the bottom for the 4-week schedule.*
+_The strategy document this build plan was derived from. Kept for reference —
+see "Phase 1: MVP Milestones" at the bottom for the 4-week schedule._
 
 ---
 
 ## 🛡️ Proof: Self-Hosted LLM Evaluation & Regression Testing
 
-**Tagline:** *Jest for LLMs. Catch AI regressions before they reach production.*
+**Tagline:** _Jest for LLMs. Catch AI regressions before they reach production._
 
 ## 📖 The Problem
-When building AI applications, traditional unit tests (`assert output == expected`) don't work because LLM outputs are non-deterministic natural language. 
+
+When building AI applications, traditional unit tests (`assert output == expected`) don't work because LLM outputs are non-deterministic natural language.
 When a developer tweaks a prompt to make the AI "more friendly," it might accidentally start hallucinating or breaking JSON formatting. Without a testing framework, these **silent regressions** make it to production, breaking the app for real users.
 
 ## 💡 The Solution
+
 **Proof** is a self-hosted, automated evaluation framework for LLM applications. It allows engineering teams to define datasets of test cases, run them against their AI app, automatically grade the results using rules or an "LLM-as-a-Judge", and block CI/CD deployments if the quality score drops.
 
 ---
@@ -171,31 +171,35 @@ When a developer tweaks a prompt to make the AI "more friendly," it might accide
 ## 🚀 Core Features
 
 ### 1. Dataset Management
-* Upload test cases via CSV, JSON, or UI.
-* Each test case contains: `Input` (the user prompt), `Context` (optional RAG context), and `Expected Behavior` (rules or reference answers).
-* Version control for datasets so you can track how your test suite evolves.
+
+- Upload test cases via CSV, JSON, or UI.
+- Each test case contains: `Input` (the user prompt), `Context` (optional RAG context), and `Expected Behavior` (rules or reference answers).
+- Version control for datasets so you can track how your test suite evolves.
 
 ### 2. The Evaluation Engine (The Core Loop)
-* **The Runner:** Concurrently sends all dataset inputs to the target LLM app. Handles API rate-limiting and retries automatically.
-* **The Scorers:** Automatically grades every single output.
-  * *Rule-based:* Regex checks, JSON schema validation, word count limits, keyword inclusion.
-  * *LLM-as-a-Judge:* Sends the `(Input + Output + Rules)` to a secondary "Judge" LLM (e.g., GPT-4o-mini) to score the output on a scale of 1-5 based on custom rubrics (e.g., "Is it polite?", "Did it hallucinate?").
+
+- **The Runner:** Concurrently sends all dataset inputs to the target LLM app. Handles API rate-limiting and retries automatically.
+- **The Scorers:** Automatically grades every single output.
+  - _Rule-based:_ Regex checks, JSON schema validation, word count limits, keyword inclusion.
+  - _LLM-as-a-Judge:_ Sends the `(Input + Output + Rules)` to a secondary "Judge" LLM (e.g., GPT-4o-mini) to score the output on a scale of 1-5 based on custom rubrics (e.g., "Is it polite?", "Did it hallucinate?").
 
 ### 3. The Comparison Dashboard
-* Visual, side-by-side comparison of **Run A** (old prompt) vs **Run B** (new prompt).
-* Highlights exactly which test cases improved, which degraded, and which stayed the same.
-* Displays an overall aggregate quality score (e.g., "Run B improved overall score by 12%").
+
+- Visual, side-by-side comparison of **Run A** (old prompt) vs **Run B** (new prompt).
+- Highlights exactly which test cases improved, which degraded, and which stayed the same.
+- Displays an overall aggregate quality score (e.g., "Run B improved overall score by 12%").
 
 ### 4. CI/CD Integration (The Killer Feature)
-* A CLI tool (`proof run`) and GitHub Action.
-* Developers can set a "Quality Threshold" (e.g., 90%). If a PR changes a prompt and the eval score drops below 90%, **the GitHub Action fails and blocks the merge.**
+
+- A CLI tool (`proof run`) and GitHub Action.
+- Developers can set a "Quality Threshold" (e.g., 90%). If a PR changes a prompt and the eval score drops below 90%, **the GitHub Action fails and blocks the merge.**
 
 ---
 
 ## 🏗️ How It Works (The User Flow)
 
 1. **Define:** The developer creates a dataset of 100 tricky customer support queries.
-2. **Configure:** They set up a Judge prompt: *"Score the AI's response from 1-5. Deduct points if it promises a refund or uses profanity."*
+2. **Configure:** They set up a Judge prompt: _"Score the AI's response from 1-5. Deduct points if it promises a refund or uses profanity."_
 3. **Run:** The developer runs `proof run --dataset support.csv --prompt v2.txt`.
 4. **Review:** The dashboard shows the new prompt scored 94/100. It highlights 3 specific cases where the AI accidentally promised a refund.
 5. **Fix & Deploy:** The developer tweaks the prompt, runs it again (Score: 99/100), and merges the PR. The CI/CD pipeline passes.
@@ -203,25 +207,27 @@ When a developer tweaks a prompt to make the AI "more friendly," it might accide
 ---
 
 ## 🎯 Target Audience
-* **AI/ML Engineers** building RAG pipelines or chatbots.
-* **Startup Founders** who need to ensure their AI product doesn't embarrass them in front of customers.
-* **Enterprise Teams** in healthcare, finance, or Europe (GDPR) who **cannot** send their proprietary test data to third-party SaaS eval tools like LangSmith or Braintrust. *(This is your main marketing angle: 100% Self-Hosted & Private).*
+
+- **AI/ML Engineers** building RAG pipelines or chatbots.
+- **Startup Founders** who need to ensure their AI product doesn't embarrass them in front of customers.
+- **Enterprise Teams** in healthcare, finance, or Europe (GDPR) who **cannot** send their proprietary test data to third-party SaaS eval tools like LangSmith or Braintrust. _(This is your main marketing angle: 100% Self-Hosted & Private)._
 
 ---
 
 ## 🛠️ Recommended Tech Stack (For a Solo Dev)
 
-* **Backend:** Python (FastAPI). Python is mandatory here because the AI/LLM ecosystem (LangChain, OpenAI SDK, etc.) is native to it.
-* **Background Jobs:** Redis + Celery (or Python's `asyncio` + `arq` for a lighter setup). *Crucial for running 1,000 evals concurrently without timing out.*
-* **Database:** PostgreSQL. You need relational data to link `Datasets` -> `Test Cases` -> `Runs` -> `Results`.
-* **Frontend:** Next.js (React) + Tailwind CSS + Shadcn UI. Keep the dashboard clean, fast, and developer-friendly.
-* **CLI:** Python `Typer` or `Click` library to build the command-line interface.
+- **Backend:** Python (FastAPI). Python is mandatory here because the AI/LLM ecosystem (LangChain, OpenAI SDK, etc.) is native to it.
+- **Background Jobs:** Redis + Celery (or Python's `asyncio` + `arq` for a lighter setup). _Crucial for running 1,000 evals concurrently without timing out._
+- **Database:** PostgreSQL. You need relational data to link `Datasets` -> `Test Cases` -> `Runs` -> `Results`.
+- **Frontend:** Next.js (React) + Tailwind CSS + Shadcn UI. Keep the dashboard clean, fast, and developer-friendly.
+- **CLI:** Python `Typer` or `Click` library to build the command-line interface.
 
 ---
 
 ## 🏆 Differentiation (Why Proof?)
-* **vs LangSmith / Braintrust:** Proof is **self-hosted**. Your data never leaves your VPC. 
-* **vs Promptfoo:** Promptfoo is powerful but heavily CLI-based and complex to configure. Proof focuses on a **beautiful, intuitive Web UI** and simpler setup for non-technical product managers to review results.
+
+- **vs LangSmith / Braintrust:** Proof is **self-hosted**. Your data never leaves your VPC.
+- **vs Promptfoo:** Promptfoo is powerful but heavily CLI-based and complex to configure. Proof focuses on a **beautiful, intuitive Web UI** and simpler setup for non-technical product managers to review results.
 
 ---
 
@@ -232,7 +238,8 @@ When a developer tweaks a prompt to make the AI "more friendly," it might accide
 - [ ] **Week 3:** Build the Frontend Dashboard. Upload CSV, view raw results, see the overall score.
 - [ ] **Week 4:** Build the CLI tool (`proof run`) and a basic GitHub Action YAML template. Write the `README.md` and launch on Hacker News / Reddit.
 
-***
+---
 
-### 💡 Advice for starting:
+### 💡 Advice for starting
+
 Don't get distracted building a massive UI on day one. **Start with the CLI and the Python backend.** If you can run a script in your terminal that outputs `Score: 85/100` and tells you exactly which 15 questions failed, you have a working MVP. The pretty dashboard comes second!

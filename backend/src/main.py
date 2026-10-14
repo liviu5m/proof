@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from db import init_db
 from models import Datasets
-
+from routes.auth import router as authRouter
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -21,6 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(authRouter)
 
 @app.get("/")
 def root():

@@ -24,10 +24,21 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+*.cover
+.coverage/
+htmlcov/
+.tox/
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.ruff_cache/
 
 # Environment variables
 .env
 .env.*
+!.env.example
 
 # IDE / Editor
 .vscode/
@@ -38,8 +49,33 @@ MANIFEST
 # Node / Frontend
 node_modules/
 dist/
+build/
+.next/
+out/
+.turbo/
+.vercel
 .vite/
+*.tsbuildinfo
+coverage/
+.eslintcache
+.pnp
+.pnp.js
+
+# Testing
+*.lcov
+.nyc_output/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Misc
+*.pem
+.*.sw?
