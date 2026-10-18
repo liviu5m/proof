@@ -9,7 +9,7 @@ from typing import Optional
 import jwt
 
 load_dotenv(verbose=True)
-
+SECRET_KEY = os.getenv("SECRET_KEY", "")
 pwd_context = CryptContext(
     schemes=["sha256_crypt"], deprecated="auto", bcrypt__rounds=12
 )
