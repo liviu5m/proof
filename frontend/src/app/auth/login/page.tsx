@@ -21,12 +21,22 @@ import { useMutation } from "@tanstack/react-query";
 import { loginUser } from "@/api/user";
 import { AxiosError } from "axios";
 import { toast } from "sonner";
+import { useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [showPassword, setShowPassword] = React.useState(false);
+
+  useEffect(() => {
+    const error = searchParams.get("error");
+    if (error) {
+      toast.error(error);
+    }
+  }, [searchParams]);
 
   const { mutate: login, isPending: isLoading } = useMutation({
     mutationKey: ["loginUser"],
@@ -58,7 +68,7 @@ export default function LoginPage() {
   };
 
   const handleGoogleSignIn = () => {
-    alert("Google OAuth would redirect here");
+    window.location.href = process.env.NEXT_PUBLIC_API_URL + "/api/auth/google";
   };
 
   return (

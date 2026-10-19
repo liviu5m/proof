@@ -6,7 +6,7 @@ from models import Users
 from utils import decodeToken, verifyUserTokenSession
 
 
-router = APIRouter(prefix="/user", dependencies=[Depends(verifyUserTokenSession)])
+router = APIRouter(prefix="/api/user", dependencies=[Depends(verifyUserTokenSession)])
 
 @router.get("/jwt")
 def getAuthUser(request: Request, session: SessionDep):

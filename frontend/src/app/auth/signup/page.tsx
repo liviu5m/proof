@@ -29,7 +29,7 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const { mutate: signup, isPending:isLoading } = useMutation({
+  const { mutate: signup, isPending: isLoading } = useMutation({
     mutationKey: ["registerUser"],
     mutationFn: () =>
       registerUser({
@@ -62,7 +62,7 @@ export default function SignupPage() {
   };
 
   const handleGoogleSignIn = () => {
-    alert("Google OAuth would redirect here");
+    window.location.href = process.env.NEXT_PUBLIC_API_URL + "/api/auth/google";
   };
 
   return (
