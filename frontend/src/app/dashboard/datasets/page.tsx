@@ -32,12 +32,17 @@ import {
 import { mockDatasets } from "@/libs/mock-data";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { getUserJwt } from "@/api/user";
+import { createDataset } from "@/api/datasets";
+import { useState } from "react";
 
 export default function DatasetsPage() {
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [showUpload, setShowUpload] = React.useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showUpload, setShowUpload] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [datasetName, setDatasetName] = useState("");
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const filteredDatasets = mockDatasets.filter(
     (d) =>
       d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -49,8 +54,20 @@ export default function DatasetsPage() {
     queryFn: () => getUserJwt(),
   });
 
-  console.log(user);
-  
+  const { mutate: uploadDataset } = useMutation({
+    mutationKey: ["uploadDataset"],
+    mutationFn: (formData: FormData) => createDataset(formData),
+    onSuccess: (data) => {
+      console.log(data);
+
+      setShowUpload(false);
+      setSelectedFile(null);
+      setDatasetName("");
+    },
+    onError: (error) => {
+      console.log(error);
+    },
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in-50 duration-500">
@@ -209,54 +226,78 @@ export default function DatasetsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center hover:border-lime-500 transition-colors bg-slate-950/40">
-                <Upload className="h-10 w-10 mx-auto text-slate-400 mb-3" />
-                <p className="text-sm font-medium text-white">
-                  Drop CSV file here
-                </p>
-                <p className="text-xs text-slate-500 mt-1">
-                  or click to browse from your device
-                </p>
-                <input
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  id="csv-upload"
-                />
-                <label htmlFor="csv-upload" className="mt-4 inline-block">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!selectedFile) return;
+                  const formData = new FormData();
+                  formData.append("file", selectedFile);
+                  formData.append("name", datasetName);
+                  uploadDataset(formData);
+                }}
+              >
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center hover:border-lime-500 transition-colors bg-slate-950/40 cursor-pointer"
+                >
+                  <Upload className="h-10 w-10 mx-auto text-slate-400 mb-3" />
+                  <p className="text-sm font-medium text-white">
+                    {selectedFile ? selectedFile.name : "Drop CSV file here"}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    or click to browse from your device
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) {
+                        setSelectedFile(e.target.files[0]);
+                        if (!datasetName)
+                          setDatasetName(
+                            e.target.files[0].name.replace(/\.[^/.]+$/, ""),
+                          );
+                      }
+                    }}
+                  />
                   <Button
+                    type="button"
                     variant="outline"
-                    className="bg-slate-800 border-slate-700 text-white hover:bg-slate-700 cursor-pointer"
+                    className="mt-4 bg-slate-800 border-slate-700 text-white hover:bg-slate-700 cursor-pointer"
                   >
                     Choose File
                   </Button>
-                </label>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dataset-name" className="text-slate-300">
-                  Dataset Name
-                </Label>
-                <Input
-                  id="dataset-name"
-                  placeholder="My Evaluation Dataset"
-                  className="bg-slate-950/60 border-slate-800 text-white placeholder-slate-500"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowUpload(false)}
-                  className="bg-transparent border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="bg-lime-500 hover:bg-lime-400 text-slate-950 font-semibold cursor-pointer"
-                  onClick={() => setShowUpload(false)}
-                >
-                  Upload Dataset
-                </Button>
-              </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dataset-name" className="text-slate-300">
+                    Dataset Name
+                  </Label>
+                  <Input
+                    id="dataset-name"
+                    placeholder="My Evaluation Dataset"
+                    className="bg-slate-950/60 border-slate-800 text-white placeholder-slate-500"
+                    value={datasetName}
+                    onChange={(e) => setDatasetName(e.target.value)}
+                  />
+                </div>
+                <div className="flex justify-end gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowUpload(false)}
+                    className="bg-transparent border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="bg-lime-500 hover:bg-lime-400 text-slate-950 font-semibold cursor-pointer"
+                    type="submit"
+                  >
+                    Upload Dataset
+                  </Button>
+                </div>
+              </form>
             </CardContent>
           </Card>
         </div>

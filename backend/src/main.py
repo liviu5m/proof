@@ -5,6 +5,8 @@ from db import init_db
 from models import Datasets
 from routes.auth import router as authRouter
 from routes.user import router as userRouter 
+from routes.datasets import router as datasetsRouter
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -24,6 +26,7 @@ app.add_middleware(
 
 app.include_router(authRouter)
 app.include_router(userRouter)
+app.include_router(datasetsRouter)
 
 @app.get("/")
 def root():

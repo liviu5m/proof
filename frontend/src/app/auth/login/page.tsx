@@ -25,6 +25,14 @@ import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 
 export default function LoginPage() {
+  return (
+    <React.Suspense fallback={<div className="w-full max-w-md mx-auto py-16 text-center text-slate-400">Loading...</div>}>
+      <LoginForm />
+    </React.Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = React.useState("");
@@ -54,7 +62,7 @@ export default function LoginPage() {
     },
     onError: (error: AxiosError) => {
       const errorMessage =
-        error?.response?.data?.detail ||
+        (error?.response?.data as any)?.detail ||
         error?.message ||
         "An unexpected error occurred";
       toast.error(errorMessage);

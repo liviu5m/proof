@@ -49,7 +49,7 @@ export default function SignupPage() {
     },
     onError: (error: AxiosError) => {
       const errorMessage =
-        error?.response?.data?.detail ||
+        (error?.response?.data as any)?.detail ||
         error?.message ||
         "An unexpected error occurred";
       toast.error(errorMessage);

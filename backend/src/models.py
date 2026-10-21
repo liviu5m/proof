@@ -18,6 +18,7 @@ class Datasets(SQLModel, table=True):
     source_path: str = Field(nullable=False)
     item_count: int = Field(nullable=False, default=0)
     hash: str = Field(nullable=False)
+    user_id: int = Field(foreign_key="users.id", nullable=False)
     createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
 class Runs(SQLModel, table=True):

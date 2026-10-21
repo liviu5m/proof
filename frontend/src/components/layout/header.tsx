@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { cn } from "@/libs/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -17,12 +18,21 @@ import { LogOut, User, Settings, Bell, Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
 
 export function Header() {
+  const pathname = usePathname()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => {
     setMounted(true)
   }, [])
+
+  const title = React.useMemo(() => {
+    if (pathname.includes("/datasets")) return "Datasets"
+    if (pathname.includes("/runs")) return "Runs"
+    if (pathname.includes("/evaluate")) return "New Evaluation"
+    if (pathname.includes("/compare")) return "Compare Runs"
+    return "Dashboard"
+  }, [pathname])
 
   const user = {
     name: "Demo User",
@@ -35,14 +45,7 @@ export function Header() {
       <div className="flex h-full items-center justify-between px-4 md:px-6">
         <div className="flex items-center gap-4">
           <h1 className="text-lg font-semibold text-foreground truncate max-w-[300px]">
-            {React.useMemo(() => {
-              const path = window.location.pathname
-              if (path.includes("/datasets")) return "Datasets"
-              if (path.includes("/runs")) return "Runs"
-              if (path.includes("/evaluate")) return "New Evaluation"
-              if (path.includes("/compare")) return "Compare Runs"
-              return "Dashboard"
-            }, [window.location.pathname])}
+            {title}
           </h1>
         </div>
 

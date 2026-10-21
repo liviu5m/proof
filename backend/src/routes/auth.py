@@ -128,7 +128,7 @@ def google_callback(code: str, session: SessionDep, response: Response):
 
     jwt = createAccessToken(
         data={
-            "userId": userFinal.id,
+            "id": userFinal.id,
             "email": userFinal.email,
             "name": userFinal.name,
         }
