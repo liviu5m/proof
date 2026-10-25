@@ -63,10 +63,8 @@ def run(
                 question=row["input"],
                 expected=row.get("expected"),
                 response=result["response"],
-                score=score,
-                flaw=None,
+                score=score["score"],
                 reason=None,
-                latency_ms=None
             )
             session.add(res)
         session.commit()

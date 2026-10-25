@@ -6,14 +6,7 @@ interface FullScreenLoaderProps {
   blur?: boolean;
 }
 
-const sizeClasses = {
-  sm: "w-6 h-6 border-2",
-  md: "w-10 h-10 border-3",
-  lg: "w-16 h-16 border-4",
-};
-
 export default function FullScreenLoader({
-  size = "md",
   text = "Loading...",
   blur = true,
 }: FullScreenLoaderProps) {
@@ -21,26 +14,30 @@ export default function FullScreenLoader({
     <div
       className={`
         fixed inset-0 z-50 
-        flex flex-col items-center justify-center gap-3 
-        bg-white/80 dark:bg-zinc-950/80 
-        ${blur ? "backdrop-blur-sm" : ""}
+        flex flex-col items-center justify-center gap-4 
+        bg-slate-950/80 
+        ${blur ? "backdrop-blur-md" : ""}
         transition-opacity duration-300
       `}
       role="status"
       aria-label="Loading page"
     >
-      <div
-        className={`
-          ${sizeClasses[size]}
-          border-zinc-200 dark:border-zinc-800
-          border-t-indigo-600 dark:border-t-indigo-500
-          rounded-full
-          animate-spin
-        `}
-      />
+      <div className="inline-flex scale-125" role="status" aria-label="loading">
+        <span
+          className="flex h-6 items-center justify-center gap-1"
+          aria-hidden="true"
+        >
+          <span className="h-2.5 w-1 rounded-full bg-indigo-500 origin-center [animation:spinner-wave_0.9s_ease-in-out_infinite_0s]" />
+          <span className="h-3.5 w-1 rounded-full bg-indigo-500 origin-center [animation:spinner-wave_0.9s_ease-in-out_infinite_0.12s]" />
+          <span className="h-4.5 w-1 rounded-full bg-indigo-500 origin-center [animation:spinner-wave_0.9s_ease-in-out_infinite_0.24s]" />
+          <span className="h-3.5 w-1 rounded-full bg-indigo-500 origin-center [animation:spinner-wave_0.9s_ease-in-out_infinite_0.36s]" />
+          <span className="h-2.5 w-1 rounded-full bg-indigo-500 origin-center [animation:spinner-wave_0.9s_ease-in-out_infinite_0.48s]" />
+        </span>
+        <span className="sr-only">Loading...</span>
+      </div>
 
       {text && (
-        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 animate-pulse">
+        <p className="text-xs font-bold text-slate-300 uppercase tracking-widest animate-pulse mt-2">
           {text}
         </p>
       )}

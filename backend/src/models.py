@@ -31,6 +31,7 @@ class Runs(SQLModel, table=True):
     avg_score: Optional[float] = Field(default=None)
     total: int = Field(nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    status: str = Field(default="Pending", nullable=False)
 
 class Results(SQLModel, table=True):
     __tablename__ = "results"
@@ -40,7 +41,5 @@ class Results(SQLModel, table=True):
     question: str = Field(nullable=False)
     expected: Optional[str] = Field(default=None)
     response: Optional[str] = Field(default=None)
-    score: Optional[int] = Field(default=None)
-    flaw: Optional[str] = Field(default=None)
+    score: Optional[float] = Field(default=None)
     reason: Optional[str] = Field(default=None)
-    latency_ms: Optional[int] = Field(default=None)

@@ -3,6 +3,7 @@ import hashlib
 import uuid
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import BaseModel
+from sqlmodel import select
 from db import SessionDep, supabase
 from models import Datasets
 from utils import verifyUserTokenSession
@@ -44,22 +45,46 @@ async def createDataset(
     session.commit()
     session.refresh(dataset)
     return {"id": dataset.id, "path": file_path}
+
 @router.get("/")
-async def getDatasets(session: SessionDep, user: dict[Any, Any] = Depends(verifyUserTokenSession)):
-    return [dataset.dict() for dataset in session.query(Datasets).filter(Datasets.user_id == user["id"])]
+async def getDatasets(
+    session: SessionDep,
+    searchQuery: str = "",
+    user: dict[Any, Any] = Depends(verifyUserTokenSession),
+):
+    stmt = select(Datasets).where(Datasets.user_id == user["id"])
+    if searchQuery:
+        stmt = stmt.where(Datasets.name.ilike(f"%{searchQuery}%"))
+    datasets = session.exec(stmt).all()
+    return [d.model_dump() for d in datasets]
 
 @router.get("/{dataset_id}")
 async def getDataset(dataset_id: int, session: SessionDep, user: dict[Any, Any] = Depends(verifyUserTokenSession)):
-    dataset = session.query(Datasets).filter(Datasets.id == dataset_id, Datasets.user_id == user["id"]).first()
+    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user["id"])
+    dataset = session.exec(stmt).first()
     if dataset is None:
         return {"error": "Dataset not found"}
-    return dataset.dict()
+    return dataset.model_dump()
 
 @router.delete("/{dataset_id}")
 async def deleteDataset(dataset_id: int, session: SessionDep, user: dict[Any, Any] = Depends(verifyUserTokenSession)):
-    dataset = session.query(Datasets).filter(Datasets.id == dataset_id, Datasets.user_id == user["id"]).first()
+    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user["id"])
+    dataset = session.exec(stmt).first()
     if dataset is None:
         return {"error": "Dataset not found"}
     session.delete(dataset)
     session.commit()
     return {"success": "Dataset deleted"}
+
+@router.get("/{dataset_id}/download")
+async def downloadDataset(dataset_id: int, session: SessionDep, user: dict[Any, Any] = Depends(verifyUserTokenSession)):
+    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user["id"])
+    dataset = session.exec(stmt).first()
+    if dataset is None:
+        return {"error": "Dataset not found"}
+    try:
+        res = supabase.storage.from_("datasets").create_signed_url(dataset.source_path, 3600)
+        url = res.get("signedURL") or res.get("signedUrl")
+        return {"url": url}
+    except Exception as e:
+        return {"error": str(e)}

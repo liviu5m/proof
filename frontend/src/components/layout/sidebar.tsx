@@ -30,11 +30,11 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 z-40 h-screen bg-background border-r transition-all duration-300 flex flex-col",
+        "fixed left-0 top-0 z-40 h-screen bg-background border-r border-slate-800/40 transition-all duration-300 flex flex-col",
         collapsed ? "w-16" : "w-64"
       )}
     >
-      <div className="flex h-16 items-center justify-between px-4 border-b">
+      <div className="flex h-16 items-center justify-between px-4 border-b border-slate-800/40">
         {!collapsed && (
           <Link href="/dashboard" className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-lime-500 flex items-center justify-center">
@@ -82,7 +82,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="p-4 border-t">
+      <div className="p-4 border-t border-slate-800/40">
         {!collapsed && (
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground text-center">

@@ -9,19 +9,19 @@ client = Client()
 SCHEMA = {
     "type": "object",
     "properties": {
-        "score": {"type": "integer"},
+        "score": {"type": "number"},
         "reason": {"type": "string"},
     },
     "required": ["score", "reason"],
 }
 
 def judge_questions(data, model):
-    scores = []
+    results = []
     for q in data:
         question = q["input"]
         response = q["response"]
         expected = q["expected"]
-        JUDGE_PROMPT = f"""Grade the answer against the expected answer.
+        JUDGE_PROMPT = f"""Grade the answer against the expected answer. You can give precise decimal scores (e.g., 3.5, 3.8, 4.2, 4.7) rather than just whole numbers.
 
         RUBRIC:
         5 = matches the expected answer, correct units/format, no errors
@@ -36,6 +36,8 @@ def judge_questions(data, model):
         - Missing the expected value entirely caps the score at 3.
         - Padding or filler lowers an otherwise-correct score by 1 (max 4).
         - If you cannot verify the reasoning, lower the score.
+        - You may assign granular decimal scores (e.g. 3.5, 4.2).
+        - Output plain text only without markdown, bolding, or special characters.
 
         First state the single biggest flaw, then score.
 
@@ -46,17 +48,15 @@ def judge_questions(data, model):
         Flaw:"""
         interaction = client.interactions.create(
             model=model,
-            system_instruction="You are a strict evaluator. Answer under 100 characters",
+            system_instruction="You are a strict evaluator. Answer under 100 characters in plain text only with no markdown or special formatting.",
             input=JUDGE_PROMPT,
             response_format=SCHEMA,
             store=False,
         )
 
         result = json.loads(interaction.output_text)
-        
-        print(f"Score: {result['score']} — {result['reason']}\n")
-        scores.append(result["score"])
-    return scores
+        results.append(result)
+    return results 
 
         
 

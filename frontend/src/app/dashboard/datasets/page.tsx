@@ -18,58 +18,86 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { formatDate } from "@/libs/utils";
-import {
-  Upload,
-  Search,
-  Filter,
-  MoreHorizontal,
-  Eye,
-  Download,
-  AlertTriangle,
-} from "lucide-react";
-import { mockDatasets } from "@/libs/mock-data";
+import { Upload, Search, Filter, Eye, Download, Trash } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { getUserJwt } from "@/api/user";
-import { createDataset } from "@/api/datasets";
+import {
+  createDataset,
+  getDatasets,
+  downloadDataset,
+  deleteDataset,
+} from "@/api/datasets";
 import { useState } from "react";
+import { Dataset } from "@/types";
+import Loader from "@/components/Loader";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import Swal from "sweetalert2";
 
 export default function DatasetsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showUpload, setShowUpload] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [datasetName, setDatasetName] = useState("");
+  const [viewingDataset, setViewingDataset] = useState<Dataset | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const filteredDatasets = mockDatasets.filter(
-    (d) =>
-      d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.hash.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  const queryClient = useQueryClient();
 
   const { data: user } = useQuery({
     queryKey: ["userJwt"],
     queryFn: () => getUserJwt(),
   });
 
-  const { mutate: uploadDataset } = useMutation({
+  const { mutate: uploadDataset, isPending: isUploading } = useMutation({
     mutationKey: ["uploadDataset"],
     mutationFn: (formData: FormData) => createDataset(formData),
-    onSuccess: (data) => {
-      console.log(data);
-
+    onSuccess: () => {
+      toast.success("Dataset uploaded successfully!");
+      queryClient.invalidateQueries({ queryKey: ["datasets"] });
       setShowUpload(false);
       setSelectedFile(null);
       setDatasetName("");
     },
-    onError: (error) => {
-      console.log(error);
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error || "Failed to upload dataset");
     },
   });
 
-  return (
+  const { mutate: removeDataset } = useMutation({
+    mutationFn: (id: number) => deleteDataset(id),
+    onSuccess: () => {
+      toast.success("Dataset deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["datasets"] });
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error || "Failed to delete dataset");
+    },
+  });
+
+  const handleDownload = async (id: number) => {
+    try {
+      const res = await downloadDataset(id);
+      if (res.url) {
+        window.open(res.url, "_blank");
+      } else {
+        toast.error("Could not retrieve download URL");
+      }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Download failed");
+    }
+  };
+
+  const { data: datasets, isLoading } = useQuery({
+    queryKey: ["datasets", searchQuery],
+    queryFn: () => getDatasets(searchQuery),
+  });
+
+  return isLoading ? (
+    <Loader />
+  ) : (
     <div className="space-y-6 animate-in fade-in-50 duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -88,24 +116,11 @@ export default function DatasetsPage() {
           <Upload className="h-4 w-4" /> Upload CSV
         </Button>
       </div>
-
-      <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-200">
-        <AlertTriangle className="h-4 w-4 text-amber-400" />
-        <AlertTitle className="font-semibold">Backend Offline</AlertTitle>
-        <AlertDescription className="text-amber-300/80">
-          Backend API at{" "}
-          <code className="bg-amber-500/20 px-1.5 py-0.5 rounded">
-            http://localhost:8000/api
-          </code>{" "}
-          is offline. Showing demo data.
-        </AlertDescription>
-      </Alert>
-
-      <Card className="bg-slate-900/80 border-slate-800/80 backdrop-blur-xl shadow-2xl shadow-black/40 rounded-2xl overflow-hidden">
-        <CardHeader className="px-6 py-5 border-b border-slate-800/80">
+      <Card className="bg-slate-900/80 border-slate-800/30 backdrop-blur-xl shadow-2xl shadow-black/40 rounded-2xl overflow-hidden">
+        <CardHeader className="px-6 py-5 border-b border-slate-800/30">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <CardTitle className="text-lg font-semibold text-white">
-              Datasets ({filteredDatasets.length})
+              Datasets ({datasets.length})
             </CardTitle>
             <div className="flex items-center gap-2">
               <div className="relative">
@@ -114,13 +129,13 @@ export default function DatasetsPage() {
                   placeholder="Search datasets..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-full sm:w-64 bg-slate-950/60 border-slate-800 text-white placeholder-slate-500 focus-visible:border-lime-500 focus-visible:ring-lime-500/20"
+                  className="pl-10 w-full sm:w-64 bg-slate-950/60 border-slate-800/50 text-white placeholder-slate-500 focus-visible:border-lime-500 focus-visible:ring-lime-500/20"
                 />
               </div>
               <Button
                 variant="outline"
                 size="icon"
-                className="bg-slate-800/50 border-slate-700/80 text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer"
+                className="bg-slate-800/50 border-slate-800/60 text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer"
               >
                 <Filter className="h-4 w-4" />
               </Button>
@@ -131,7 +146,7 @@ export default function DatasetsPage() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader className="bg-slate-950/40">
-                <TableRow className="border-slate-800 hover:bg-transparent">
+                <TableRow className="border-slate-800/30 hover:bg-transparent">
                   <TableHead className="text-xs font-semibold text-slate-400 uppercase tracking-wider pl-6">
                     ID
                   </TableHead>
@@ -153,10 +168,10 @@ export default function DatasetsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredDatasets.map((dataset) => (
+                {datasets.map((dataset: Dataset) => (
                   <TableRow
                     key={dataset.id}
-                    className="border-slate-800/80 hover:bg-slate-800/40 transition-colors"
+                    className="border-slate-800/20 hover:bg-slate-800/40 transition-colors"
                   >
                     <TableCell className="font-mono text-sm text-slate-300 pl-6">
                       {dataset.id}
@@ -183,6 +198,7 @@ export default function DatasetsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          onClick={() => setViewingDataset(dataset)}
                           className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
                           title="View"
                         >
@@ -191,6 +207,7 @@ export default function DatasetsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          onClick={() => handleDownload(dataset.id)}
                           className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
                           title="Download"
                         >
@@ -199,10 +216,26 @@ export default function DatasetsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
-                          title="More"
+                          onClick={async () => {
+                            const result = await Swal.fire({
+                              title: "Are you sure?",
+                              text: `Delete dataset "${dataset.name}"? This cannot be undone.`,
+                              icon: "warning",
+                              showCancelButton: true,
+                              confirmButtonColor: "#ef4444",
+                              cancelButtonColor: "#334155",
+                              confirmButtonText: "Yes, delete it!",
+                              background: "#0f172a",
+                              color: "#f8fafc",
+                            });
+                            if (result.isConfirmed) {
+                              removeDataset(dataset.id);
+                            }
+                          }}
+                          className="h-8 w-8 text-slate-400 hover:text-red-400 hover:bg-slate-800 cursor-pointer"
+                          title="Delete"
                         >
-                          <MoreHorizontal className="h-4 w-4" />
+                          <Trash className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -213,6 +246,59 @@ export default function DatasetsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {viewingDataset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in-0 duration-200">
+          <Card className="w-full max-w-lg mx-4 bg-slate-900 border-slate-800 shadow-2xl">
+            <CardHeader>
+              <CardTitle className="text-xl font-semibold text-white">
+                Dataset Details: {viewingDataset.name}
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                ID: {viewingDataset.id} • Created:{" "}
+                {formatDate(viewingDataset.createdAt)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2 text-sm text-slate-300">
+                <div className="flex justify-between py-1 border-b border-slate-800">
+                  <span className="text-slate-400">Total Items:</span>
+                  <span className="font-semibold text-white">
+                    {viewingDataset.item_count}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-800">
+                  <span className="text-slate-400">File Hash (SHA256):</span>
+                  <span className="font-mono text-xs text-lime-400">
+                    {viewingDataset.hash}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-800">
+                  <span className="text-slate-400">Storage Path:</span>
+                  <span className="font-mono text-xs text-slate-300 truncate max-w-[260px]">
+                    {viewingDataset.source_path}
+                  </span>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <Button
+                  onClick={() => handleDownload(viewingDataset.id)}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2 cursor-pointer"
+                >
+                  <Download className="h-4 w-4" /> Download CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setViewingDataset(null)}
+                  className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white cursor-pointer"
+                >
+                  Close
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {showUpload && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in-0 duration-200">
@@ -236,7 +322,7 @@ export default function DatasetsPage() {
                   uploadDataset(formData);
                 }}
               >
-                <div 
+                <div
                   onClick={() => fileInputRef.current?.click()}
                   className="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center hover:border-lime-500 transition-colors bg-slate-950/40 cursor-pointer"
                 >

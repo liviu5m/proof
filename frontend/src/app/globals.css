@@ -1,20 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #07090e;
+  --foreground: #f8fafc;
+  --border: #1e293b;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-border: var(--border);
   --font-sans: var(--font-montserrat), sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #07090e;
+    --foreground: #f8fafc;
+    --border: #1e293b;
   }
 }
 
@@ -22,4 +25,24 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-montserrat), sans-serif;
+}
+
+button, input, select, textarea, a, [role="button"] {
+  outline: none !important;
+}
+
+:focus, :focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+@keyframes spinner-wave {
+  0%, 100% {
+    transform: scaleY(0.4);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
 }

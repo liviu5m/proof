@@ -16,6 +16,8 @@ export interface Run {
   avg_score: number | null;
   total: number;
   created_at: string;
+  status?: string;
+  datasetName?: string;
 }
 
 export interface Result {
@@ -75,4 +77,47 @@ export interface User {
   email: string;
   name: string;
   created_at: string;
+}
+
+export interface Dataset {
+  id: number;
+  name: string;
+  source_path: string;
+  item_count: number;
+  hash: string;
+  createdAt: string;
+}
+
+export interface RunData {
+  dataset_id: number;
+  model: string;
+  system_prompt: string;
+  judge_model: string;
+}
+
+export interface Result {
+  id: number;
+  run_id: number;
+  idx: number;
+  question: string;
+  expected: string | null;
+  response: string | null;
+  score: number | null;
+  flaw: string | null;
+  reason: string | null;
+  latency_ms: number | null;
+}
+
+export interface Run {
+  id: number;
+  dataset_id: number;
+  model: string;
+  system_prompt: string;
+  datasetName: string;
+  judge_model: string;
+  avg_score: number | null;
+  total: number;
+  created_at: string;
+  results?: Result[];
+  stauts?: string;
 }

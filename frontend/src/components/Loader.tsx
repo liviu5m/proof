@@ -5,28 +5,21 @@ interface LoaderProps {
   text?: string;
 }
 
-const sizeClasses = {
-  sm: "w-4 h-4 border-2",
-  md: "w-8 h-8 border-3",
-  lg: "w-12 h-12 border-4",
-};
-
-export default function Loader({ size = "md", text }: LoaderProps) {
+export default function Loader({ text = "Loading..." }: LoaderProps) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 p-4">
-      <div
-        className={`
-          ${sizeClasses[size]}
-          border-zinc-200 dark:border-zinc-800
-          border-t-indigo-600 dark:border-t-indigo-500
-          rounded-full
-          animate-spin
-        `}
-        role="status"
-        aria-label="Loading"
-      />
+    <div className="w-full h-full min-h-[300px] flex flex-col items-center justify-center gap-4">
+      <div className="inline-flex scale-125" role="status" aria-label="loading">
+        <span className="flex h-6 items-center justify-center gap-1" aria-hidden="true">
+          <span className="h-2.5 w-1 rounded-full bg-indigo-500 origin-center [animation:spinner-wave_0.9s_ease-in-out_infinite_0s]" />
+          <span className="h-3.5 w-1 rounded-full bg-indigo-500 origin-center [animation:spinner-wave_0.9s_ease-in-out_infinite_0.12s]" />
+          <span className="h-4.5 w-1 rounded-full bg-indigo-500 origin-center [animation:spinner-wave_0.9s_ease-in-out_infinite_0.24s]" />
+          <span className="h-3.5 w-1 rounded-full bg-indigo-500 origin-center [animation:spinner-wave_0.9s_ease-in-out_infinite_0.36s]" />
+          <span className="h-2.5 w-1 rounded-full bg-indigo-500 origin-center [animation:spinner-wave_0.9s_ease-in-out_infinite_0.48s]" />
+        </span>
+        <span className="sr-only">Loading...</span>
+      </div>
       {text && (
-        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 animate-pulse">
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse mt-1">
           {text}
         </p>
       )}
