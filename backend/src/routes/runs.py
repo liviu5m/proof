@@ -39,8 +39,8 @@ async def createRun(
     if not rows:
         raise HTTPException(status_code=400, detail="Dataset is empty")
 
-    data = run_tests(rows, payload.system_prompt, payload.model)
-    scores = judge_questions(data, payload.judge_model)
+    data = await run_tests(rows, payload.system_prompt, payload.model)
+    scores = await judge_questions(data, payload.judge_model)
 
     avg_score = sum(s["score"] for s in scores) / len(scores) if scores else 0.0
 
@@ -79,15 +79,25 @@ async def createRun(
 
 @router.get("/")
 async def getRuns(
-    session: SessionDep,
+    search: str | None = None,
+    session: SessionDep = None,# type: ignore
     user: dict[Any, Any] = Depends(verifyUserTokenSession),
 ):
     runs_stmt = (
         select(Runs, Datasets.name)
         .join(Datasets)
         .where(Datasets.user_id == user["id"])
-        .order_by(desc(Runs.created_at))
     )
+    if search:
+        from sqlalchemy import or_, cast, String
+        runs_stmt = runs_stmt.where(
+            or_(
+                Datasets.name.ilike(f"%{search}%"),
+                Runs.model.ilike(f"%{search}%"),
+                cast(Runs.id, String).ilike(f"%{search}%")
+            )
+        )
+    runs_stmt = runs_stmt.order_by(desc(Runs.created_at))
     runs = session.exec(runs_stmt).all()
     
     response = []

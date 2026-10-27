@@ -1,3 +1,4 @@
+import asyncio
 import csv
 from sqlmodel import Session
 import typer
@@ -42,8 +43,8 @@ def run(
         rows = load_dataset(questions)
         dataset.item_count = len(rows)
         session.commit()
-        data = run_tests(rows, prompt, model)
-        scores = judge_questions(data, judge_modal)
+        data = asyncio.run(run_tests(rows, prompt, model))
+        scores = asyncio.run(judge_questions(data, judge_modal))
         avg = 0
         if scores:
             avg = sum(scores) / len(scores)

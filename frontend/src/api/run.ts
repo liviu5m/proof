@@ -6,7 +6,7 @@ export async function createRun(data: RunData) {
   return response.data;
 }
 
-export async function getRuns() {
-  const response = await api.get("/api/runs/");
+export async function getRuns(search?: string) {
+  const response = await api.get("/api/runs/", { params: search ? { search } : {} });
   return response.data;
 }
