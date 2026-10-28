@@ -15,13 +15,11 @@ import requests
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 router = APIRouter(prefix="/api/auth")
-
 load_dotenv()
-
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 FRONTEND_URL = os.getenv("FRONTEND_URL")
-REDIRECT_URI = "http://localhost:8000/api/auth/google/callback"
+REDIRECT_URI = os.getenv("REDIRECT_URI")
 
 class LoginData(BaseModel):
     email: str
