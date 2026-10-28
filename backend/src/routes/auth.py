@@ -34,7 +34,7 @@ async def login(data: LoginData, session: SessionDep, response: Response):
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     jwt = createAccessToken(
         data={
-            "userId": user.id,
+            "id": user.id,
             "email": user.email,
             "name": user.name,
         }
@@ -143,3 +143,21 @@ def google_callback(code: str, session: SessionDep, response: Response):
     )
     return response
     
+@router.post("/logout")
+def logout(response: Response):
+    response.delete_cookie(
+        key="jwt",
+        secure=True,
+        path="/",
+        samesite="none",
+    )
+    response.set_cookie(
+        key="jwt",
+        value="",
+        expires="Thu, 01 Jan 1970 00:00:00 GMT",
+        max_age=-1,
+        path="/",
+        secure=True,
+        samesite="none",
+    )
+    return {"message": "Logged out successfully"}

@@ -19,7 +19,7 @@ def getAuthUser(request: Request, session: SessionDep):
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    userId = payload.get("userId")
+    userId = payload.get("id")
     if not userId:
         raise HTTPException(status_code=401, detail="Invalid token")
 
