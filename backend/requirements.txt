@@ -10,3 +10,4 @@ PyJWT
 bcrypt
 requests
 pydantic
+psycopg[binary]
