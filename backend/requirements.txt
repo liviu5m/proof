@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlmodel
+supabase
+google-genai
+python-dotenv
+typer
+passlib
+PyJWT
+bcrypt
+requests
+pydantic
