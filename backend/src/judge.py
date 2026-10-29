@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import json
 import os
 
-from scorers import check_json, check_keywords, check_regex, check_word_count
+from src.scorers import check_json, check_keywords, check_regex, check_word_count
 
 load_dotenv()
 

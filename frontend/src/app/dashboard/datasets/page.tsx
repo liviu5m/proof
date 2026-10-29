@@ -143,6 +143,23 @@ export default function DatasetsPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
+          {(!datasets || datasets.length === 0) ? (
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+              <div className="bg-slate-800/50 p-4 rounded-full mb-4 text-slate-400">
+                <Upload className="h-8 w-8" />
+              </div>
+              <h3 className="text-lg font-semibold text-white">No datasets found</h3>
+              <p className="text-sm text-slate-400 mt-1 max-w-sm">
+                {searchQuery ? "No datasets match your search query." : "Get started by uploading your first evaluation CSV dataset."}
+              </p>
+              <Button
+                onClick={() => setShowUpload(true)}
+                className="mt-6 gap-2 bg-lime-500 hover:bg-lime-400 text-slate-950 font-semibold cursor-pointer"
+              >
+                <Upload className="h-4 w-4" /> Upload Dataset
+              </Button>
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader className="bg-slate-950/40">
@@ -244,6 +261,7 @@ export default function DatasetsPage() {
               </TableBody>
             </Table>
           </div>
+          )}
         </CardContent>
       </Card>
 

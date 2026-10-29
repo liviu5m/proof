@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,6 +21,7 @@ import {
   Check,
   ChevronDown,
   Search,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import Loader from "@/components/Loader";
@@ -42,13 +44,11 @@ const availableModels = [
 export default function EvaluatePage() {
   const [datasetSearch, setDatasetSearch] = useState("");
   const { data: datasets, isLoading } = useQuery({
-    queryKey: ["datasets"],
+    queryKey: ["datasets", datasetSearch],
     queryFn: () => getDatasets(datasetSearch),
   });
-  const [selectedDataset, setSelectedDataset] = useState(
-    datasets ? datasets[0].id : "",
-  );
 
+  const [selectedDataset, setSelectedDataset] = useState<number>(0);
   const queryClient = useQueryClient();
   const [isDatasetOpen, setIsDatasetOpen] = useState(false);
   const [modelName, setModelName] = useState("gemini-3.5-flash-lite");
@@ -57,15 +57,16 @@ export default function EvaluatePage() {
     "You are an expert AI judge evaluating responses based on accuracy, helpfulness, and tone.",
   );
 
-  const currentDatasetObj = datasets
-    ? datasets.find((d: Dataset) => d.id === selectedDataset) || datasets[0]
-    : "";
-
   useEffect(() => {
-    if (datasets) {
+    if (datasets && datasets.length > 0 && (!selectedDataset || !datasets.some((d: Dataset) => d.id === selectedDataset))) {
       setSelectedDataset(datasets[0].id);
     }
-  }, [datasets]);
+  }, [datasets, selectedDataset]);
+
+  const currentDatasetObj = datasets
+    ? datasets.find((d: Dataset) => d.id === selectedDataset) || datasets[0]
+    : null;
+
   const { mutate: runEvaluation, isPending } = useMutation({
     mutationKey: ["runEvaluation"],
     mutationFn: () =>
@@ -87,6 +88,10 @@ export default function EvaluatePage() {
     },
   });
 
+  if (isLoading) {
+    return <Loader />;
+  }
+
   if (isPending) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6">
@@ -103,9 +108,42 @@ export default function EvaluatePage() {
     );
   }
 
-  return isLoading ? (
-    <Loader />
-  ) : (
+  if (!datasets || datasets.length === 0) {
+    return (
+      <div className="space-y-6 animate-in fade-in-50 duration-500 max-w-4xl mx-auto">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
+            <PlayCircle className="h-8 w-8 text-lime-500" /> New Evaluation Run
+          </h1>
+          <p className="text-slate-400 mt-1">
+            Configure dataset, model, and judge prompts to execute a new
+            evaluation.
+          </p>
+        </div>
+        <Card className="bg-slate-900/80 border-slate-800/30 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
+          <CardContent className="flex flex-col items-center justify-center py-16 px-4 text-center space-y-4">
+            <div className="bg-slate-800/50 p-4 rounded-full text-slate-400">
+              <Database className="h-8 w-8" />
+            </div>
+            <h3 className="text-lg font-semibold text-white">No datasets available</h3>
+            <p className="text-sm text-slate-400 max-w-sm">
+              You need to upload at least one evaluation dataset before running evaluations.
+            </p>
+            <Button
+              asChild
+              className="gap-2 bg-lime-500 hover:bg-lime-400 text-slate-950 font-semibold cursor-pointer"
+            >
+              <Link href="/dashboard/datasets">
+                <Upload className="h-4 w-4" /> Go to Datasets
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
     <div className="space-y-6 animate-in fade-in-50 duration-500 max-w-4xl mx-auto">
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
@@ -137,7 +175,7 @@ export default function EvaluatePage() {
               <div className="flex items-center gap-3">
                 <Database className="h-4 w-4 text-indigo-400" />
                 <span className="font-medium">
-                  {currentDatasetObj.name} ({currentDatasetObj.item_count}{" "}
+                  {currentDatasetObj?.name} ({currentDatasetObj?.item_count}{" "}
                   items)
                 </span>
               </div>

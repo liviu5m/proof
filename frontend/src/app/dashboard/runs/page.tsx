@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { LayoutDashboard, Eye, ArrowUpRight, CheckCircle2 } from "lucide-react";
+import { LayoutDashboard, Eye, ArrowUpRight, CheckCircle2, PlayCircle } from "lucide-react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { getRuns } from "@/api/run";
@@ -28,11 +28,52 @@ export default function RunsPage() {
     queryFn: () => getRuns(),
   });
 
-  console.log(runs);
+  if (isLoading) {
+    return <Loader />;
+  }
 
-  return isLoading ? (
-    <Loader />
-  ) : (
+  if (!runs || runs.length === 0) {
+    return (
+      <div className="space-y-6 animate-in fade-in-50 duration-500">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
+              <LayoutDashboard className="h-8 w-8 text-lime-500" /> Evaluation Runs
+            </h1>
+            <p className="text-slate-400 mt-1">
+              Review history, scores, and detailed item evaluations for all benchmark runs.
+            </p>
+          </div>
+          <Link href="/dashboard/evaluate">
+            <Button className="gap-2 bg-lime-500 hover:bg-lime-400 text-slate-950 font-semibold shadow-lg shadow-lime-500/20 cursor-pointer transition-all">
+              <ArrowUpRight className="h-4 w-4" /> New Run
+            </Button>
+          </Link>
+        </div>
+        <Card className="bg-slate-900/80 border-slate-800/30 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
+          <CardContent className="flex flex-col items-center justify-center py-16 px-4 text-center space-y-4">
+            <div className="bg-slate-800/50 p-4 rounded-full text-slate-400">
+              <LayoutDashboard className="h-8 w-8" />
+            </div>
+            <h3 className="text-lg font-semibold text-white">No runs created</h3>
+            <p className="text-sm text-slate-400 max-w-sm">
+              You haven't executed any evaluation runs yet. Run your first benchmark to track performance.
+            </p>
+            <Button
+              asChild
+              className="gap-2 bg-lime-500 hover:bg-lime-400 text-slate-950 font-semibold cursor-pointer"
+            >
+              <Link href="/dashboard/evaluate">
+                <PlayCircle className="h-4 w-4" /> Go to Evaluation
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
     <div className="space-y-6 animate-in fade-in-50 duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { GitCompare, Award, Search, ChevronDown, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { GitCompare, Award, Search, ChevronDown, Check, PlayCircle } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { getRuns } from "@/api/run";
 import Loader from "@/components/Loader";
@@ -134,8 +136,76 @@ export default function ComparePage() {
     }
   }, [runs, runA, runB]);
 
-  if (isLoading || !runs || runs.length === 0) {
+  if (isLoading) {
     return <Loader />;
+  }
+
+  if (!runs || runs.length === 0) {
+    return (
+      <div className="space-y-6 animate-in fade-in-50 duration-500">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
+            <GitCompare className="h-8 w-8 text-lime-500" /> Compare Runs
+          </h1>
+          <p className="text-slate-400 mt-1">
+            Side-by-side comparison of two evaluation runs to analyze score differences and prompt outputs.
+          </p>
+        </div>
+        <Card className="bg-slate-900/80 border-slate-800/30 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
+          <CardContent className="flex flex-col items-center justify-center py-16 px-4 text-center space-y-4">
+            <div className="bg-slate-800/50 p-4 rounded-full text-slate-400">
+              <GitCompare className="h-8 w-8" />
+            </div>
+            <h3 className="text-lg font-semibold text-white">No runs available for comparison</h3>
+            <p className="text-sm text-slate-400 max-w-sm">
+              You need at least two completed evaluation runs to perform side-by-side comparisons.
+            </p>
+            <Button
+              asChild
+              className="gap-2 bg-lime-500 hover:bg-lime-400 text-slate-950 font-semibold cursor-pointer"
+            >
+              <Link href="/dashboard/evaluate">
+                <PlayCircle className="h-4 w-4" /> Go to Evaluation
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (runs.length === 1) {
+    return (
+      <div className="space-y-6 animate-in fade-in-50 duration-500">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
+            <GitCompare className="h-8 w-8 text-lime-500" /> Compare Runs
+          </h1>
+          <p className="text-slate-400 mt-1">
+            Side-by-side comparison of two evaluation runs to analyze score differences and prompt outputs.
+          </p>
+        </div>
+        <Card className="bg-slate-900/80 border-slate-800/30 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
+          <CardContent className="flex flex-col items-center justify-center py-16 px-4 text-center space-y-4">
+            <div className="bg-slate-800/50 p-4 rounded-full text-slate-400">
+              <GitCompare className="h-8 w-8" />
+            </div>
+            <h3 className="text-lg font-semibold text-white">Need one more run</h3>
+            <p className="text-sm text-slate-400 max-w-sm">
+              You have only 1 run ({runs[0].model}). Create a second evaluation run to compare results.
+            </p>
+            <Button
+              asChild
+              className="gap-2 bg-lime-500 hover:bg-lime-400 text-slate-950 font-semibold cursor-pointer"
+            >
+              <Link href="/dashboard/evaluate">
+                <PlayCircle className="h-4 w-4" /> Create Another Run
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   const selectedRunA = runs.find((r: Run) => r.id === runA) || runs[0];

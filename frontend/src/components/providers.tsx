@@ -7,7 +7,6 @@ import { Toaster } from "sonner";
 
 export function Providers({
   children,
-  ...props
 }: React.ComponentProps<typeof ThemeProvider>) {
   const [queryClient] = React.useState(
     () =>
@@ -22,10 +21,8 @@ export function Providers({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider {...props}>
-        {children}
-        <Toaster position="top-right" richColors/>
-      </ThemeProvider>
+      {children}
+      <Toaster position="top-right" richColors />
     </QueryClientProvider>
   );
 }

@@ -5,7 +5,7 @@ from typing import Optional
 class Users(SQLModel, table=True):
     __tablename__ = "users"
     id: Optional[int] = Field(default=None, primary_key=True)
-    name: str = Field(nullable=False, unique=True)
+    name: str = Field(nullable=False)
     email: str = Field(nullable=False, unique=True)
     password: Optional[str] = Field(default=None)
     provider: str = Field(default="credentials", nullable=False) 

@@ -15,3 +15,8 @@ export async function getUserJwt() {
   const response = await api.get("/api/user/jwt");
   return response.data;
 }
+
+export async function logoutUser() {
+  const response = await api.post("/api/auth/logout");
+  return response.data;
+}
