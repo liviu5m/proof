@@ -1,12 +1,15 @@
 from typing import Any
 import hashlib
 import uuid
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+import csv
+import io
+from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException
 from pydantic import BaseModel
 from sqlmodel import select
-from db import SessionDep, supabase
-from models import Datasets
-from utils import verifyUserTokenSession
+from src.db import SessionDep, supabase
+from src.models import Datasets
+from src.utils import verifyUserTokenSession
+from src.validators import validate_csv_headers, validate_csv_rows, REQUIRED_COLUMNS
 
 router = APIRouter(prefix="/api/dataset", dependencies=[Depends(verifyUserTokenSession)])
 
@@ -22,8 +25,22 @@ async def createDataset(
     user: dict[Any, Any] = Depends(verifyUserTokenSession),
     ):
     contents = await file.read()
+    text = contents.decode("utf-8")
+    
+    csv_file = io.StringIO(text)
+    reader = csv.DictReader(csv_file)
+    rows = list(reader)
+    
+    header_errors = validate_csv_headers(reader.fieldnames or [])
+    if header_errors:
+        raise HTTPException(status_code=400, detail={"errors": header_errors, "code": "invalid_headers"})
+    
+    valid_rows, row_errors = validate_csv_rows(rows)
+    if row_errors:
+        raise HTTPException(status_code=400, detail={"errors": row_errors, "code": "invalid_rows"})
+    
     file_hash = hashlib.sha256(contents).hexdigest()
-    item_count = max(0, len(contents.decode("utf-8").splitlines()) - 1)
+    item_count = len(valid_rows)
 
     file_id = uuid.uuid4().hex[:8]
     file_path = f"{user['id']}/{file_id}_{file.filename}"

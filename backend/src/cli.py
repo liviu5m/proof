@@ -1,12 +1,12 @@
 import asyncio
 import csv
+from google import genai
 from sqlmodel import Session
 import typer
 from .utils import get_file_hash
 from .db import engine
 from sqlmodel import select
 
-from .db import SessionDep
 from .models import Datasets, Results, Runs
 from .runner import run_tests
 from .judge import judge_questions
@@ -18,8 +18,24 @@ app.add_typer(dataset_app, name="dataset")
 
 
 def load_dataset(path):
-    with open(path, newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+    try:
+        with open(path, newline="", encoding="utf-8") as f:
+            return list(csv.DictReader(f))
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {path}", err=True)
+        raise typer.Exit(1)
+
+
+def get_or_create_default_user(session: Session):
+    """Get or create a default user for CLI operations."""
+    from .models import Users
+    user = session.exec(select(Users).where(Users.email == "cli@local")).first()
+    if not user:
+        user = Users(email="cli@local", name="CLI User", provider="cli")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+    return user
 
 
 @app.command()
@@ -28,44 +44,50 @@ def run(
     prompt: str = typer.Option("You are a helpful assistant.", "--prompt", "-p"),
     model: str = typer.Option("gemini-3.5-flash-lite", "--model", "-m"),
     judge_modal: str = typer.Option("gemini-3.1-flash-lite", "--judge-model", "-jm"),
+    user_id: int = typer.Option(None, "--user-id", "-u", help="User ID (default: auto)"),
 ):
     with Session(engine) as session:
-        hash = get_file_hash(questions) 
+        hash = get_file_hash(questions)
 
         datasetsStmt = select(Datasets).where(Datasets.hash == hash)
         datasets = session.exec(datasetsStmt).all()
         if not datasets:
-            dataset = Datasets(name=questions, source_path=questions, hash=hash)
+            if user_id is None:
+                user = get_or_create_default_user(session)
+                user_id = user.id
+            dataset = Datasets(name=questions, source_path=questions, hash=hash, user_id=user_id)
             session.add(dataset)
             session.commit()
         else:
             dataset = datasets[0]
+        client = genai.Client()
         rows = load_dataset(questions)
         dataset.item_count = len(rows)
         session.commit()
-        data = asyncio.run(run_tests(rows, prompt, model))
-        scores = asyncio.run(judge_questions(data, judge_modal))
+        data = asyncio.run(run_tests(rows, prompt, model, client))
+        scores = asyncio.run(judge_questions(data, judge_modal, client))
         avg = 0
         if scores:
-            avg = sum(scores) / len(scores)
+            avg = sum(s["score"] for s in scores if s.get("score") is not None) / len(scores)
             typer.echo(f"\nScore: {avg:.1f}/5")
 
-        assert dataset.id is not None
-        run = Runs(dataset_id=dataset.id, model=model, system_prompt=prompt, judge_model=judge_modal, avg_score=avg, total=len(data))
-        session.add(run)
+        if dataset.id is None:
+            typer.echo("Error: Dataset ID not set", err=True)
+            raise typer.Exit(1)
+        run_obj = Runs(dataset_id=dataset.id, model=model, system_prompt=prompt, judge_model=judge_modal, avg_score=avg, total=len(data))
+        session.add(run_obj)
         session.commit()
-        session.refresh(run)
-        print(run)
-        print(rows)
+        session.refresh(run_obj)
+
         for idx, (row, result, score) in enumerate(zip(rows, data, scores)):
             res = Results(
-                run_id=run.id,
+                run_id=run_obj.id,
                 idx=idx,
                 question=row["input"],
                 expected=row.get("expected"),
                 response=result["response"],
-                score=score["score"],
-                reason=None,
+                score=score.get("score"),
+                reason=score.get("reason"),
             )
             session.add(res)
         session.commit()
@@ -158,7 +180,7 @@ def compare(
 
             if score_a is not None and score_b is not None:
                 diff = score_b - score_a
-                change = f"{diff:+d}"
+                change = f"{diff:+.1f}"
                 if diff > 0:
                     verdict = "✅ IMPROVED"
                     improved_count += 1
@@ -216,8 +238,8 @@ def compare(
                 typer.echo(f"  RUN #{run_a} (Score: {ra.score})")
                 resp = ra.response[:200] + "..." if ra.response and len(ra.response) > 200 else ra.response
                 typer.echo(f"  {resp}")
-                if ra.flaw:
-                    typer.echo(f"  ❌ Flaw: {ra.flaw}")
+                if ra.reason:
+                    typer.echo(f"  ❌ Flaw: {ra.reason}")
                 typer.echo("")
 
             typer.echo("  " + "─" * 76)
@@ -227,8 +249,8 @@ def compare(
                 typer.echo(f"  RUN #{run_b} (Score: {rb.score})")
                 resp = rb.response[:200] + "..." if rb.response and len(rb.response) > 200 else rb.response
                 typer.echo(f"  {resp}")
-                if rb.flaw:
-                    typer.echo(f"  ❌ Flaw: {rb.flaw}")
+                if rb.reason:
+                    typer.echo(f"  ❌ Flaw: {rb.reason}")
                 typer.echo("")
 
         if regressed_count > 0:
@@ -238,6 +260,7 @@ def compare(
 def dataset_create(
     csv: str = typer.Option(..., "--csv", "-c", help="Path to CSV file"),
     name: str = typer.Option(None, "--name", "-n", help="Dataset name (default: filename)"),
+    user_id: int = typer.Option(None, "--user-id", "-u", help="User ID (default: auto)"),
 ):
     """Register a CSV as a dataset (deduplicated by content hash)."""
     from pathlib import Path
@@ -268,11 +291,16 @@ def dataset_create(
             typer.echo(f"  Created: {existing.createdAt}")
             return
 
+        if user_id is None:
+            user = get_or_create_default_user(session)
+            user_id = user.id
+
         dataset = Datasets(
             name=name,
             source_path=str(csv_path),
             item_count=item_count,
-            hash=file_hash
+            hash=file_hash,
+            user_id=user_id
         )
         session.add(dataset)
         session.commit()

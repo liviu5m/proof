@@ -4,12 +4,12 @@ from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlmodel import select
-from db import SessionDep
-from models import Users
+from src.db import SessionDep
+from src.models import Users
 import jwt
 import os
 from passlib.context import CryptContext
-from utils import createAccessToken, hashPassword
+from src.utils import createAccessToken, hashPassword
 import bcrypt
 import requests
 

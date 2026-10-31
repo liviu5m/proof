@@ -1,9 +1,9 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from db import SessionDep
-from models import Users
-from utils import decodeToken, verifyUserTokenSession
+from src.db import SessionDep
+from src.models import Users
+from src.utils import decodeToken, verifyUserTokenSession
 
 
 router = APIRouter(prefix="/api/user", dependencies=[Depends(verifyUserTokenSession)])
