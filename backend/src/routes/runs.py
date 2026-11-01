@@ -7,8 +7,8 @@ from sqlalchemy import desc
 from sqlmodel import select
 from src.db import SessionDep, supabase
 from src.deps import get_llm_client
-from src.models import Datasets, Runs, Results
-from src.utils import verifyUserTokenSession
+from src.models import Datasets, Runs, Results, Users
+from src.utils import get_current_user, verifyUserTokenSession, sanitize_text, sanitize_prompt
 from src.runner import run_tests
 from src.judge import judge_questions
 from src.validators import validate_csv_headers, validate_csv_rows
@@ -26,10 +26,10 @@ async def createRun(
     payload: RunCreateRequest,
     session: SessionDep,
     client = Depends(get_llm_client),
-    user: dict[Any, Any] = Depends(verifyUserTokenSession),
+    user: Users = Depends(get_current_user),
 ):
     dataset = session.get(Datasets, payload.dataset_id)
-    if not dataset or dataset.user_id != user["id"]:
+    if not dataset or dataset.user_id != user.id:
         raise HTTPException(status_code=404, detail={"error": "Dataset not found", "code": "not_found"})
 
     try:
@@ -52,16 +52,19 @@ async def createRun(
     if row_errors:
         raise HTTPException(status_code=400, detail={"errors": row_errors, "code": "invalid_rows"})
 
-    data = await run_tests(valid_rows, payload.system_prompt, payload.model, client)
-    scores = await judge_questions(data, payload.judge_model, client)
+    clean_system_prompt = sanitize_prompt(payload.system_prompt)
+    clean_judge_model = sanitize_text(payload.judge_model, max_length=100)
+
+    data = await run_tests(valid_rows, clean_system_prompt, payload.model, client)
+    scores = await judge_questions(data, clean_judge_model, client)
 
     avg_score = sum(s["score"] for s in scores) / len(scores) if scores else 0.0
 
     run = Runs(
         dataset_id=payload.dataset_id,
         model=payload.model,
-        system_prompt=payload.system_prompt,
-        judge_model=payload.judge_model,
+        system_prompt=clean_system_prompt,
+        judge_model=clean_judge_model,
         avg_score=avg_score,
         total=len(data),
         status="Completed"
@@ -94,12 +97,12 @@ async def createRun(
 async def getRuns(
     search: str | None = None,
     session: SessionDep = None,# type: ignore
-    user: dict[Any, Any] = Depends(verifyUserTokenSession),
+    user: Users = Depends(get_current_user),
 ):
     runs_stmt = (
         select(Runs, Datasets.name)
         .join(Datasets)
-        .where(Datasets.user_id == user["id"])
+        .where(Datasets.user_id == user.id)
     )
     if search:
         from sqlalchemy import or_, cast, String

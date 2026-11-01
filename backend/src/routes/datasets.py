@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 from src.db import SessionDep, supabase
 from src.models import Datasets
-from src.utils import verifyUserTokenSession
+from src.utils import get_current_user, verifyUserTokenSession, sanitize_text
 from src.validators import validate_csv_headers, validate_csv_rows, REQUIRED_COLUMNS
 
 router = APIRouter(prefix="/api/dataset", dependencies=[Depends(verifyUserTokenSession)])
@@ -22,8 +22,9 @@ async def createDataset(
     session: SessionDep, 
     file: UploadFile = File(...),
     name: str = Form(...),
-    user: dict[Any, Any] = Depends(verifyUserTokenSession),
+    user: Users = Depends(get_current_user),
     ):
+    name = sanitize_text(name, max_length=200)
     contents = await file.read()
     text = contents.decode("utf-8")
     
@@ -43,7 +44,7 @@ async def createDataset(
     item_count = len(valid_rows)
 
     file_id = uuid.uuid4().hex[:8]
-    file_path = f"{user['id']}/{file_id}_{file.filename}"
+    file_path = f"{user.id}/{file_id}_{file.filename}"
 
     res = supabase.storage.from_("datasets").upload(
         path=file_path,
@@ -56,7 +57,7 @@ async def createDataset(
         source_path=file_path,
         item_count=item_count,
         hash=file_hash,
-        user_id=user["id"]
+        user_id=user.id
     )
     session.add(dataset)
     session.commit()
@@ -67,25 +68,25 @@ async def createDataset(
 async def getDatasets(
     session: SessionDep,
     searchQuery: str = "",
-    user: dict[Any, Any] = Depends(verifyUserTokenSession),
+    user: Users = Depends(get_current_user),
 ):
-    stmt = select(Datasets).where(Datasets.user_id == user["id"])
+    stmt = select(Datasets).where(Datasets.user_id == user.id)
     if searchQuery:
         stmt = stmt.where(Datasets.name.ilike(f"%{searchQuery}%"))
     datasets = session.exec(stmt).all()
     return [d.model_dump() for d in datasets]
 
 @router.get("/{dataset_id}")
-async def getDataset(dataset_id: int, session: SessionDep, user: dict[Any, Any] = Depends(verifyUserTokenSession)):
-    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user["id"])
+async def getDataset(dataset_id: int, session: SessionDep, user: Users = Depends(get_current_user)):
+    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user.id)
     dataset = session.exec(stmt).first()
     if dataset is None:
         return {"error": "Dataset not found"}
     return dataset.model_dump()
 
 @router.delete("/{dataset_id}")
-async def deleteDataset(dataset_id: int, session: SessionDep, user: dict[Any, Any] = Depends(verifyUserTokenSession)):
-    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user["id"])
+async def deleteDataset(dataset_id: int, session: SessionDep, user: Users = Depends(get_current_user)):
+    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user.id)
     dataset = session.exec(stmt).first()
     if dataset is None:
         return {"error": "Dataset not found"}
@@ -94,8 +95,8 @@ async def deleteDataset(dataset_id: int, session: SessionDep, user: dict[Any, An
     return {"success": "Dataset deleted"}
 
 @router.get("/{dataset_id}/download")
-async def downloadDataset(dataset_id: int, session: SessionDep, user: dict[Any, Any] = Depends(verifyUserTokenSession)):
-    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user["id"])
+async def downloadDataset(dataset_id: int, session: SessionDep, user: Users = Depends(get_current_user)):
+    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user.id)
     dataset = session.exec(stmt).first()
     if dataset is None:
         return {"error": "Dataset not found"}

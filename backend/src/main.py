@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -10,6 +11,10 @@ from src.routes.auth import router as authRouter
 from src.routes.user import router as userRouter
 from src.routes.datasets import router as datasetsRouter
 from src.routes.runs import router as runsRouter
+import os
+
+load_dotenv()
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -20,13 +25,27 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-    ],
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "connect-src 'self' " + FRONTEND_URL + "; "
+        "script-src 'self'; "
+        "style-src 'self'; "
+        "img-src 'self' data:;"
+    )
+    return response
 
 # Global exception handlers - structured JSON errors
 @app.exception_handler(StarletteHTTPException)
