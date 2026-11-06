@@ -1,6 +1,6 @@
 from google import genai
-from fastapi import Depends
-from .config import settings 
+from .config import settings
 
-def get_llm_client(settings):
+
+def get_llm_client():
     return genai.Client(api_key=settings.GEMINI_API_KEY)

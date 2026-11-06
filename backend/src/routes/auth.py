@@ -8,12 +8,9 @@ from src.db import SessionDep
 from src.models import Users
 import jwt
 import os
-from passlib.context import CryptContext
-from src.utils import createAccessToken, hashPassword
-import bcrypt
+from src.utils import createAccessToken, hashPassword, verifyPassword
 import requests
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 router = APIRouter(prefix="/api/auth")
 load_dotenv()
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
@@ -32,6 +29,8 @@ async def login(data: LoginData, session: SessionDep, response: Response):
 
     if not user:
         raise HTTPException(status_code=400, detail="Incorrect email or password")
+    if not verifyPassword(data.password, user.password):
+        raise HTTPException(status_code=400, detail="Passwords do not match.")
     jwt = createAccessToken(
         data={
             "id": user.id,
@@ -64,6 +63,8 @@ async def register(data: RegisterData, session: SessionDep):
         raise HTTPException(status_code=400, detail="Passwords do not match")
     if user:
         raise HTTPException(status_code=400, detail="Email already registered")
+    if len(data.password) < 8:
+        raise HTTPException(status_code=400, detail="Password is too short")
     hashed_password = hashPassword(data.password)
     user = Users(email=data.email, password=hashed_password, name=data.name)
     session.add(user)

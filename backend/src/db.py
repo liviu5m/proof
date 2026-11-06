@@ -1,7 +1,7 @@
 import os
 from sqlmodel import create_engine, SQLModel, Session, text
 from dotenv import load_dotenv
-from typing import Annotated
+from typing import Annotated, Optional
 from fastapi import Depends, FastAPI
 from supabase import create_client, Client
 
@@ -12,33 +12,49 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "") 
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL not set")
+_engine = None
+_supabase: Optional[Client] = None
 
-engine = create_engine(
-    DATABASE_URL,
-    echo=True,
-    connect_args={
-        "connect_timeout": 5,  
-        "options": "-c search_path=proof",
-    },
-    pool_size=5,
-    max_overflow=10,
-)
+def _get_engine():
+    global _engine
+    if _engine is None:
+        if not DATABASE_URL:
+            raise ValueError("DATABASE_URL not set")
+        _engine = create_engine(
+            DATABASE_URL,
+            echo=True,
+            connect_args={"connect_timeout": 5, "options": "-c search_path=proof"},
+            pool_size=5,
+            max_overflow=10,
+        )
+    return _engine
 
+
+def _get_supabase() -> Client:
+    global _supabase
+    if _supabase is None:
+        _supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    return _supabase
+
+
+class _Lazy:
+    def __init__(self, getter):
+        self._getter = getter
+    def __getattr__(self, name):
+        return getattr(self._getter(), name)
+
+
+engine = _Lazy(_get_engine)
+supabase = _Lazy(_get_supabase)
 
 def init_db():
-    SQLModel.metadata.create_all(engine)
+    eng = _get_engine()
+    SQLModel.metadata.create_all(eng)
     print("✅ Database tables created successfully!")
-    from sqlalchemy import inspect
-    inspector = inspect(engine)
-    tables = inspector.get_table_names()
-    print(f"📊 Tables created: {tables}")
 
 
 def get_session():
-    with Session(engine) as session:
+    with Session(_get_engine()) as session:
         yield session
 
 

@@ -13,16 +13,12 @@ from src.routes.datasets import router as datasetsRouter
 from src.routes.runs import router as runsRouter
 import os
 
+from config import settings
+
 load_dotenv()
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    init_db()
-    yield
-
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_URL],
@@ -47,7 +43,6 @@ async def add_security_headers(request: Request, call_next):
     )
     return response
 
-# Global exception handlers - structured JSON errors
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     detail = exc.detail
@@ -84,3 +79,27 @@ app.include_router(runsRouter)
 @app.get("/")
 def root():
     return "Hello World"
+
+@app.get("/healthz")
+def healthz():
+    return {
+        "status": "ok",
+        "version": "0.1.0",
+        "services": {
+            "db": bool(settings.DATABASE_URL),
+            "llm": bool(settings.GEMINI_API_KEY),
+            "storage": bool(settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY),
+        },
+    }
+
+@app.get("/readyz")
+def readyz():
+    return {
+        "status": "ready",
+        "version": "0.1.0",
+        "services": {
+            "db": bool(settings.DATABASE_URL),
+            "llm": bool(settings.GEMINI_API_KEY),
+            "storage": bool(settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY),
+        },
+    }

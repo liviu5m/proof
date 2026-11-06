@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException
 from pydantic import BaseModel
 from sqlmodel import select
 from src.db import SessionDep, supabase
-from src.models import Datasets
+from src.models import Datasets, Users
 from src.utils import get_current_user, verifyUserTokenSession, sanitize_text
 from src.validators import validate_csv_headers, validate_csv_rows, REQUIRED_COLUMNS
 

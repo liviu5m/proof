@@ -79,7 +79,7 @@ async def createRun(
             idx=idx,
             question=row.input,
             expected=row.expected,
-            response=result["response"],
+            response=result.get("response"),
             score=score["score"],
             reason=score["reason"],
         )

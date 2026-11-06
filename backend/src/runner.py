@@ -5,18 +5,19 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 load_dotenv()
 
+def _is_retryable(exception: Exception) -> bool:
+    if hasattr(exception, "status_code") and exception.status_code == 429:
+        return True
+    if isinstance(exception, (asyncio.TimeoutError, TimeoutError)):
+        return True
+    return False
+
 GEMINI_RETRY = retry(
     wait=wait_exponential(multiplier=1, min=2, max=30),  
     stop=stop_after_attempt(5),
-    retry=retry_if_exception_type(Exception),  
+    retry=retry_if_exception_type(_is_retryable),  
     reraise=True,
 )
-
-def _is_rate_limit(e: Exception) -> bool:
-    """Check if exception is a rate limit (429) or timeout error."""
-    msg = str(e).lower()
-    return "429" in msg or "rate limit" in msg or "timeout" in msg or "timed out" in msg
-
 
 async def run_single(q, prompt, model, client):
     full_prompt = prompt
@@ -42,7 +43,7 @@ async def run_single(q, prompt, model, client):
     try:
         interaction = await _call()
     except Exception as e:
-        return {"error": str(e), "code": "gemini_api_error", "input": q.get("input", "")}
+        return {"error": str(e), "response": None, "code": "gemini_api_error", "input": q.get("input", "")}
 
     print(f"Q: {q['input']}")
     print(f"A: {interaction.output_text}\n")
@@ -65,7 +66,7 @@ async def run_tests(questions, prompt, model, client):
     normalized = []
     for r in results:
         if isinstance(r, Exception):
-            normalized.append({"error": str(r), "code": "task_exception"})
+            normalized.append({"error": str(r), "response": None, "code": "task_exception"})
         else:
             normalized.append(r)
     return normalized

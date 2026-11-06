@@ -3,7 +3,7 @@ from google.genai import Client
 from dotenv import load_dotenv
 import json
 import os
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from src.scorers import check_json, check_keywords, check_regex, check_word_count
 
@@ -18,14 +18,24 @@ SCHEMA = {
     "required": ["score", "reason"],
 }
 
+def _is_retryable(exception: Exception) -> bool:
+    if hasattr(exception, "status_code") and exception.status_code == 429:
+        return True
+    if isinstance(exception, (asyncio.TimeoutError, TimeoutError)):
+        return True
+    return False
+
 GEMINI_RETRY = retry(
     wait=wait_exponential(multiplier=1, min=2, max=30),
     stop=stop_after_attempt(5),
+    retry=retry_if_exception(_is_retryable),
     reraise=True,
 )
 
 
 async def judge_single(q, model, client):
+    if not q.get("response"):
+        return {"score": 0.0, "reason": "no response"}
     question = q["input"]
     response = q["response"]
     expected = q["expected"]
