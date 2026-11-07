@@ -20,15 +20,23 @@ def _get_engine():
     if _engine is None:
         if not DATABASE_URL:
             raise ValueError("DATABASE_URL not set")
-        _engine = create_engine(
-            DATABASE_URL,
-            echo=True,
-            connect_args={"connect_timeout": 5, "options": "-c search_path=proof"},
-            pool_size=5,
-            max_overflow=10,
-        )
+        
+        engine_kwargs = {
+            "echo": True,
+        }
+        
+        if DATABASE_URL.startswith("sqlite"):
+            engine_kwargs["connect_args"] = {}
+        else:
+            engine_kwargs["connect_args"] = {
+                "connect_timeout": 5,
+                "options": "-c search_path=proof",
+            }
+            engine_kwargs["pool_size"] = 5
+            engine_kwargs["max_overflow"] = 10
+        
+        _engine = create_engine(DATABASE_URL, **engine_kwargs)
     return _engine
-
 
 def _get_supabase() -> Client:
     global _supabase

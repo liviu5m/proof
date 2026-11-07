@@ -1,7 +1,7 @@
 from google import genai
 from dotenv import load_dotenv
 import asyncio
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 load_dotenv()
 
@@ -15,7 +15,7 @@ def _is_retryable(exception: Exception) -> bool:
 GEMINI_RETRY = retry(
     wait=wait_exponential(multiplier=1, min=2, max=30),  
     stop=stop_after_attempt(5),
-    retry=retry_if_exception_type(_is_retryable),  
+    retry=retry_if_exception(_is_retryable),  
     reraise=True,
 )
 

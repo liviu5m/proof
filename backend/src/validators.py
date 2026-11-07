@@ -85,8 +85,7 @@ def validate_csv_rows(rows: list[dict]) -> tuple[list[DatasetRow], list[dict]]:
     """
     valid = []
     errors = []
-    for i, row in enumerate(rows, start=2):  # line 1 = header
-        # Normalize keys: strip whitespace, lowercase
+    for i, row in enumerate(rows, start=2):   
         normalized = {k.strip().lower(): v for k, v in row.items()}
         try:
             valid.append(DatasetRow(**normalized))

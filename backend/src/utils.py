@@ -3,16 +3,17 @@ import os
 import re
 import html
 from dotenv import load_dotenv
-from fastapi import HTTPException, Request, status, WebSocket
+from fastapi import HTTPException, Request, UploadFile, status, WebSocket
 from passlib.context import CryptContext
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import jwt
 from sqlmodel import select
-
 from src.db import SessionDep
 from src.models import Users
+import pyclamd
+import asyncio
 
 load_dotenv(verbose=True)
 SECRET_KEY = os.getenv("SECRET_KEY", "")
@@ -149,3 +150,18 @@ def sanitize_prompt(value: str, max_length: int = 4000) -> str:
     return value
 
 
+async def scan_file(file: UploadFile):
+    cd = pyclamd.ClamDUnixSocket() 
+    loop = asyncio.get_event_loop()
+    content = await file.read()
+    await file.seek(0) 
+    
+    scan_result = await loop.run_in_executor(None, cd.scan_stream, content)
+    if scan_result and scan_result.get('stream'):
+        status = scan_result['stream'][0]
+        if status == 'FOUND':
+            virus_name = scan_result['stream'][1]
+            raise HTTPException(
+                status_code=400,
+                detail={"error": f"Malicious file detected: {virus_name}", "code": "virus_detected"}
+            )

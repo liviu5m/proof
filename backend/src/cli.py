@@ -4,8 +4,9 @@ from google import genai
 from sqlmodel import Session
 import typer
 from .utils import get_file_hash
-from .db import engine
-from sqlmodel import select
+from .db import _get_engine 
+from sqlmodel import select, Session
+from .deps import get_llm_client
 
 from .models import Datasets, Results, Runs
 from .runner import run_tests
@@ -46,7 +47,7 @@ def run(
     judge_modal: str = typer.Option("gemini-3.1-flash-lite", "--judge-model", "-jm"),
     user_id: int = typer.Option(None, "--user-id", "-u", help="User ID (default: auto)"),
 ):
-    with Session(engine) as session:
+    with Session(_get_engine()) as session:
         hash = get_file_hash(questions)
 
         datasetsStmt = select(Datasets).where(Datasets.hash == hash)
@@ -60,7 +61,7 @@ def run(
             session.commit()
         else:
             dataset = datasets[0]
-        client = genai.Client()
+        client = get_llm_client()
         rows = load_dataset(questions)
         dataset.item_count = len(rows)
         session.commit()
@@ -101,7 +102,7 @@ def compare(
     only_improved: bool = typer.Option(False, "--only-improved", help="Show only improved questions"),
 ):
     """Compare two runs side by side."""
-    with Session(engine) as session:
+    with Session(_get_engine()) as session:
         run_a_obj = session.get(Runs, run_a)
         run_b_obj = session.get(Runs, run_b)
 
@@ -277,7 +278,7 @@ def dataset_create(
     if name is None:
         name = csv_path.stem
 
-    with Session(engine) as session:
+    with Session(_get_engine()) as session:
         existing = session.exec(
             select(Datasets).where(Datasets.hash == file_hash)
         ).first()
@@ -317,7 +318,7 @@ def dataset_create(
 @dataset_app.command("list")
 def dataset_list():
     """List all registered datasets."""
-    with Session(engine) as session:
+    with Session(_get_engine()) as session:
         datasets = session.exec(
             select(Datasets).order_by(Datasets.createdAt.desc())
         ).all()
@@ -349,7 +350,7 @@ def dataset_show(
     limit: int = typer.Option(10, "--limit", "-l", help="Number of questions to show"),
 ):
     """Show questions from a dataset."""
-    with Session(engine) as session:
+    with Session(_get_engine()) as session:
         dataset = session.get(Datasets, dataset_id)
         if not dataset:
             typer.echo(f"Error: Dataset #{dataset_id} not found", err=True)
@@ -376,7 +377,7 @@ def run_list(
     dataset_id: int = typer.Option(None, "--dataset", "-d"),
     limit: int = typer.Option(20, "--limit", "-l"),
 ):
-    with Session(engine) as session:
+    with Session(_get_engine()) as session:
         query = select(Runs).order_by(Runs.created_at.desc())
         if dataset_id:
             query = query.where(Runs.dataset_id == dataset_id)
@@ -389,7 +390,7 @@ def run_list(
 
 @app.command("show")
 def run_show(run_id: int = typer.Argument(...), limit: int = typer.Option(10, "--limit", "-l")):
-    with Session(engine) as session:
+    with Session(_get_engine()) as session:
         run = session.get(Runs, run_id)
         if not run:
             typer.echo(f"Run #{run_id} not found", err=True)

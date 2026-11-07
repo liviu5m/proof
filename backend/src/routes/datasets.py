@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 from src.db import SessionDep, supabase
 from src.models import Datasets, Users
-from src.utils import get_current_user, verifyUserTokenSession, sanitize_text
+from src.utils import get_current_user, scan_file, verifyUserTokenSession, sanitize_text
 from src.validators import validate_csv_headers, validate_csv_rows, REQUIRED_COLUMNS
 
 router = APIRouter(prefix="/api/dataset", dependencies=[Depends(verifyUserTokenSession)])
@@ -24,8 +24,23 @@ async def createDataset(
     name: str = Form(...),
     user: Users = Depends(get_current_user),
     ):
-    name = sanitize_text(name, max_length=200)
+
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Only CSV files are allowed", "code": "invalid_file_type"}
+        )
+
+    MAX_FILE_SIZE = 5 * 1024 * 1024  
     contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": f"File too large. Max size is 5 MB.", "code": "file_too_large"}
+        )
+
+    await scan_file(file)
+    name = sanitize_text(name, max_length=200)
     text = contents.decode("utf-8")
     
     csv_file = io.StringIO(text)
@@ -39,7 +54,7 @@ async def createDataset(
     valid_rows, row_errors = validate_csv_rows(rows)
     if row_errors:
         raise HTTPException(status_code=400, detail={"errors": row_errors, "code": "invalid_rows"})
-    
+
     file_hash = hashlib.sha256(contents).hexdigest()
     item_count = len(valid_rows)
 
