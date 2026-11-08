@@ -162,3 +162,6 @@ def logout(response: Response):
         samesite="none",
     )
     return {"message": "Logged out successfully"}
+
+@app.post("/refresh")
+async def 

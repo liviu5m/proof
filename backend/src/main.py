@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from contextlib import asynccontextmanager
-from src.db import init_db
+from src.db import init_db, check_db_connection
 from src.models import Datasets
 from src.routes.auth import router as authRouter
 from src.routes.user import router as userRouter
@@ -36,6 +36,8 @@ async def validate_config():
         raise RuntimeError("DATABASE_URL is required")
     if not settings.SECRET_KEY:
         raise RuntimeError("SECRET_KEY is required")
+    if not check_db_connection():
+        raise RuntimeError("Cannot connect to database. Check DATABASE_URL.")
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
@@ -69,6 +71,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     return JSONResponse(
         {"error": error, "code": code, "status": exc.status_code, "request_id": request_id},
         status_code=exc.status_code,
+        headers=getattr(exc, "headers", None)
     )
 
 @app.exception_handler(RequestValidationError)

@@ -20,6 +20,7 @@ class Datasets(SQLModel, table=True):
     hash: str = Field(nullable=False)
     user_id: int = Field(foreign_key="users.id", nullable=False)
     createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    deleted_at: Optional[datetime] = Field(default=None)
 
 class Runs(SQLModel, table=True):
     __tablename__ = "runs"
@@ -32,6 +33,7 @@ class Runs(SQLModel, table=True):
     total: int = Field(nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
     status: str = Field(default="Pending", nullable=False)
+    deleted_at: Optional[datetime] = Field(default=None)
 
 class Results(SQLModel, table=True):
     __tablename__ = "results"
@@ -43,3 +45,15 @@ class Results(SQLModel, table=True):
     response: Optional[str] = Field(default=None)
     score: Optional[float] = Field(default=None)
     reason: Optional[str] = Field(default=None)
+    deleted_at: Optional[datetime] = Field(default=None)
+
+
+class RefreshToken(SQLModel, table=True):
+    __tablename__ = "refresh_tokens"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", nullable=False)
+    token_hash: str = Field(nullable=False, unique=True)  
+    expires_at: datetime = Field(nullable=False)
+    revoked: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

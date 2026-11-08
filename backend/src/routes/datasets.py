@@ -3,6 +3,7 @@ import hashlib
 import uuid
 import csv
 import io
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException
 from pydantic import BaseModel
 from sqlmodel import select
@@ -11,13 +12,15 @@ from src.models import Datasets, Users
 from src.utils import get_current_user, scan_file, verifyUserTokenSession, sanitize_text
 from src.validators import validate_csv_headers, validate_csv_rows, REQUIRED_COLUMNS
 
-router = APIRouter(prefix="/api/dataset", dependencies=[Depends(verifyUserTokenSession)])
+from src.rate_limit import rate_limit_datasets
+
+router = APIRouter(prefix="/api/dataset", dependencies=[Depends(verifyUserTokenSession), Depends(rate_limit_datasets)])
 
 class Dataset(BaseModel):
     name: str
     file: str
 
-@router.post("/")
+@router.post("")
 async def createDataset(
     session: SessionDep, 
     file: UploadFile = File(...),
@@ -79,13 +82,13 @@ async def createDataset(
     session.refresh(dataset)
     return {"id": dataset.id, "path": file_path}
 
-@router.get("/")
+@router.get("")
 async def getDatasets(
     session: SessionDep,
-    searchQuery: str = "",
     user: Users = Depends(get_current_user),
+    searchQuery: str = "",
 ):
-    stmt = select(Datasets).where(Datasets.user_id == user.id)
+    stmt = select(Datasets).where(Datasets.user_id == user.id).where(Datasets.deleted_at == None)
     if searchQuery:
         stmt = stmt.where(Datasets.name.ilike(f"%{searchQuery}%"))
     datasets = session.exec(stmt).all()
@@ -93,7 +96,7 @@ async def getDatasets(
 
 @router.get("/{dataset_id}")
 async def getDataset(dataset_id: int, session: SessionDep, user: Users = Depends(get_current_user)):
-    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user.id)
+    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user.id).where(Datasets.deleted_at == None)
     dataset = session.exec(stmt).first()
     if dataset is None:
         return {"error": "Dataset not found"}
@@ -101,17 +104,22 @@ async def getDataset(dataset_id: int, session: SessionDep, user: Users = Depends
 
 @router.delete("/{dataset_id}")
 async def deleteDataset(dataset_id: int, session: SessionDep, user: Users = Depends(get_current_user)):
-    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user.id)
+    stmt = select(Datasets).where(
+        Datasets.id == dataset_id,
+        Datasets.user_id == user.id,
+        Datasets.deleted_at == None,   # noqa: E711
+    )
     dataset = session.exec(stmt).first()
     if dataset is None:
         return {"error": "Dataset not found"}
-    session.delete(dataset)
+    dataset.deleted_at = datetime.now(timezone.utc)
+    session.add(dataset)
     session.commit()
     return {"success": "Dataset deleted"}
 
 @router.get("/{dataset_id}/download")
 async def downloadDataset(dataset_id: int, session: SessionDep, user: Users = Depends(get_current_user)):
-    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user.id)
+    stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user.id).where(Datasets.deleted_at == None)
     dataset = session.exec(stmt).first()
     if dataset is None:
         return {"error": "Dataset not found"}

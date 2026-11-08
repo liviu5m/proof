@@ -115,3 +115,5 @@ pytest-mock==3.14.0
 respx==0.23.0
 pytest-cov==5.0.0
 pyclamd==0.4.1
+alembic==1.20.1
+redis==8.1.0

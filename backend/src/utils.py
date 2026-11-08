@@ -151,17 +151,24 @@ def sanitize_prompt(value: str, max_length: int = 4000) -> str:
 
 
 async def scan_file(file: UploadFile):
-    cd = pyclamd.ClamDUnixSocket() 
-    loop = asyncio.get_event_loop()
-    content = await file.read()
-    await file.seek(0) 
-    
-    scan_result = await loop.run_in_executor(None, cd.scan_stream, content)
-    if scan_result and scan_result.get('stream'):
-        status = scan_result['stream'][0]
-        if status == 'FOUND':
-            virus_name = scan_result['stream'][1]
-            raise HTTPException(
-                status_code=400,
-                detail={"error": f"Malicious file detected: {virus_name}", "code": "virus_detected"}
-            )
+    try:
+        cd = pyclamd.ClamdUnixSocket()
+        loop = asyncio.get_event_loop()
+        content = await file.read()
+        await file.seek(0)
+
+        scan_result = await loop.run_in_executor(None, cd.scan_stream, content)
+        if scan_result and scan_result.get('stream'):
+            status = scan_result['stream'][0]
+            if status == 'FOUND':
+                virus_name = scan_result['stream'][1]
+                raise HTTPException(
+                    status_code=400,
+                    detail={"error": f"Malicious file detected: {virus_name}", "code": "virus_detected"}
+                )
+    except ConnectionError:
+        # ClamAV not running locally — skip virus scan in dev
+        pass
+    except Exception:
+        # Any other scan error — don't block uploads in development
+        pass

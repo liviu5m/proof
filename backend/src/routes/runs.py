@@ -13,7 +13,9 @@ from src.runner import run_tests
 from src.judge import judge_questions
 from src.validators import validate_csv_headers, validate_csv_rows
 
-router = APIRouter(prefix="/api/runs", dependencies=[Depends(verifyUserTokenSession)])
+from src.rate_limit import check_concurrent_run, rate_limit_runs, release_concurrent_run
+
+router = APIRouter(prefix="/api/runs", dependencies=[Depends(verifyUserTokenSession), Depends(rate_limit_runs)])
 
 class RunCreateRequest(BaseModel):
     dataset_id: int
@@ -28,8 +30,10 @@ async def createRun(
     client = Depends(get_llm_client),
     user: Users = Depends(get_current_user),
 ):
+    if not user or not user.id:
+        raise HTTPException(status_code=404, detail={"error": "User not found", "code": "not_found"})
     dataset = session.get(Datasets, payload.dataset_id)
-    if not dataset or dataset.user_id != user.id:
+    if not dataset or dataset.user_id != user.id or dataset.deleted_at is not None:
         raise HTTPException(status_code=404, detail={"error": "Dataset not found", "code": "not_found"})
 
     try:
@@ -54,9 +58,12 @@ async def createRun(
 
     clean_system_prompt = sanitize_prompt(payload.system_prompt)
     clean_judge_model = sanitize_text(payload.judge_model, max_length=100)
-
-    data = await run_tests(valid_rows, clean_system_prompt, payload.model, client)
-    scores = await judge_questions(data, clean_judge_model, client)
+    await check_concurrent_run(user.id)
+    try:
+        data = await run_tests(valid_rows, clean_system_prompt, payload.model, client)
+        scores = await judge_questions(data, clean_judge_model, client)
+    finally:
+        await release_concurrent_run(user.id)
 
     avg_score = sum(s["score"] for s in scores) / len(scores) if scores else 0.0
 
@@ -103,6 +110,8 @@ async def getRuns(
         select(Runs, Datasets.name)
         .join(Datasets)
         .where(Datasets.user_id == user.id)
+        .where(Datasets.deleted_at == None)   # noqa: E711
+        .where(Runs.deleted_at == None)         # noqa: E711
     )
     if search:
         from sqlalchemy import or_, cast, String
@@ -118,7 +127,10 @@ async def getRuns(
     
     response = []
     for run, dataset_name in runs:
-        results_stmt = select(Results).where(Results.run_id == run.id).order_by(Results.idx)
+        results_stmt = select(Results).where(
+            Results.run_id == run.id,
+            Results.deleted_at == None   # noqa: E711
+        ).order_by(Results.idx)
         results = session.exec(results_stmt).all()
         
         response.append({

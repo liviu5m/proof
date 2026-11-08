@@ -2,8 +2,10 @@ import os
 from sqlmodel import create_engine, SQLModel, Session, text
 from dotenv import load_dotenv
 from typing import Annotated, Optional
-from fastapi import Depends, FastAPI
+from fastapi import Depends
 from supabase import create_client, Client
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from sqlalchemy.exc import OperationalError
 
 load_dotenv()
 
@@ -15,6 +17,12 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 _engine = None
 _supabase: Optional[Client] = None
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    retry=retry_if_exception_type(OperationalError),
+    reraise=True,
+)
 def _get_engine():
     global _engine
     if _engine is None:
@@ -23,6 +31,7 @@ def _get_engine():
         
         engine_kwargs = {
             "echo": True,
+            "pool_pre_ping": True
         }
         
         if DATABASE_URL.startswith("sqlite"):
@@ -60,6 +69,13 @@ def init_db():
     SQLModel.metadata.create_all(eng)
     print("✅ Database tables created successfully!")
 
+def check_db_connection() -> bool:
+    try:
+        with Session(_get_engine()) as session:
+            session.exec(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
 
 def get_session():
     with Session(_get_engine()) as session:

@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"
     MAX_CONCURRENT_RUNS: int = 5
+    REDIS_URL: str = "redis://localhost:6379/0"
+    RATE_LIMIT_RUNS_PER_MIN: int = 30
+    RATE_LIMIT_DATASETS_PER_MIN: int = 30
 
     class Config:
         env_file = ".env"
