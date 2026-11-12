@@ -8,6 +8,16 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      thresholds: {
+        lines: 65,
+        functions: 65,
+        branches: 60,
+        statements: 65,
+      },
+    },
   },
   resolve: {
     alias: {

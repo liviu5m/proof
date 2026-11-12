@@ -43,10 +43,16 @@ const availableModels = [
 
 export default function EvaluatePage() {
   const [datasetSearch, setDatasetSearch] = useState("");
-  const { data: datasets, isLoading } = useQuery({
+  const { data: datasets, isLoading, error: datasetsError } = useQuery({
     queryKey: ["datasets", datasetSearch],
     queryFn: () => getDatasets(datasetSearch),
   });
+
+  if (datasetsError) {
+    toast.error(
+      (datasetsError as any)?.response?.data?.error || "Failed to load datasets"
+    );
+  }
 
   const [selectedDataset, setSelectedDataset] = useState<number>(0);
   const queryClient = useQueryClient();

@@ -90,11 +90,18 @@ export default function DatasetsPage() {
     }
   };
 
-  const { data: datasets, isLoading } = useQuery({
+  const { data: datasets, isLoading, error: datasetsError } = useQuery({
     queryKey: ["datasets", searchQuery],
     queryFn: () => getDatasets(searchQuery),
   });
 
+  if (datasetsError) {
+    toast.error(
+      (datasetsError as any)?.response?.data?.error || "Failed to load datasets"
+    );
+  }
+
+  console.log(datasets);
   return isLoading ? (
     <Loader />
   ) : (
@@ -120,7 +127,7 @@ export default function DatasetsPage() {
         <CardHeader className="px-6 py-5 border-b border-slate-800/30">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <CardTitle className="text-lg font-semibold text-white">
-              Datasets ({datasets.length})
+              Datasets ({datasets ? datasets.length : 0})
             </CardTitle>
             <div className="flex items-center gap-2">
               <div className="relative">
@@ -143,14 +150,18 @@ export default function DatasetsPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {(!datasets || datasets.length === 0) ? (
+          {!datasets || datasets.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
               <div className="bg-slate-800/50 p-4 rounded-full mb-4 text-slate-400">
                 <Upload className="h-8 w-8" />
               </div>
-              <h3 className="text-lg font-semibold text-white">No datasets found</h3>
+              <h3 className="text-lg font-semibold text-white">
+                No datasets found
+              </h3>
               <p className="text-sm text-slate-400 mt-1 max-w-sm">
-                {searchQuery ? "No datasets match your search query." : "Get started by uploading your first evaluation CSV dataset."}
+                {searchQuery
+                  ? "No datasets match your search query."
+                  : "Get started by uploading your first evaluation CSV dataset."}
               </p>
               <Button
                 onClick={() => setShowUpload(true)}
@@ -160,107 +171,107 @@ export default function DatasetsPage() {
               </Button>
             </div>
           ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-950/40">
-                <TableRow className="border-slate-800/30 hover:bg-transparent">
-                  <TableHead className="text-xs font-semibold text-slate-400 uppercase tracking-wider pl-6">
-                    ID
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Name
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Items
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Hash (8)
-                  </TableHead>
-                  <TableHead className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Created
-                  </TableHead>
-                  <TableHead className="text-right text-xs font-semibold text-slate-400 uppercase tracking-wider pr-6">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {datasets.map((dataset: Dataset) => (
-                  <TableRow
-                    key={dataset.id}
-                    className="border-slate-800/20 hover:bg-slate-800/40 transition-colors"
-                  >
-                    <TableCell className="font-mono text-sm text-slate-300 pl-6">
-                      {dataset.id}
-                    </TableCell>
-                    <TableCell className="font-medium text-white truncate max-w-[220px]">
-                      {dataset.name}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className="bg-slate-800 text-slate-300 border-slate-700"
-                      >
-                        {dataset.item_count} items
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm text-slate-400">
-                      {dataset.hash.slice(0, 8)}
-                    </TableCell>
-                    <TableCell className="text-sm text-slate-400">
-                      {formatDate(dataset.createdAt)}
-                    </TableCell>
-                    <TableCell className="text-right pr-6">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setViewingDataset(dataset)}
-                          className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
-                          title="View"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDownload(dataset.id)}
-                          className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
-                          title="Download"
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={async () => {
-                            const result = await Swal.fire({
-                              title: "Are you sure?",
-                              text: `Delete dataset "${dataset.name}"? This cannot be undone.`,
-                              icon: "warning",
-                              showCancelButton: true,
-                              confirmButtonColor: "#ef4444",
-                              cancelButtonColor: "#334155",
-                              confirmButtonText: "Yes, delete it!",
-                              background: "#0f172a",
-                              color: "#f8fafc",
-                            });
-                            if (result.isConfirmed) {
-                              removeDataset(dataset.id);
-                            }
-                          }}
-                          className="h-8 w-8 text-slate-400 hover:text-red-400 hover:bg-slate-800 cursor-pointer"
-                          title="Delete"
-                        >
-                          <Trash className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-slate-950/40">
+                  <TableRow className="border-slate-800/30 hover:bg-transparent">
+                    <TableHead className="text-xs font-semibold text-slate-400 uppercase tracking-wider pl-6">
+                      ID
+                    </TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Name
+                    </TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Items
+                    </TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Hash (8)
+                    </TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Created
+                    </TableHead>
+                    <TableHead className="text-right text-xs font-semibold text-slate-400 uppercase tracking-wider pr-6">
+                      Actions
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {datasets.map((dataset: Dataset) => (
+                    <TableRow
+                      key={dataset.id}
+                      className="border-slate-800/20 hover:bg-slate-800/40 transition-colors"
+                    >
+                      <TableCell className="font-mono text-sm text-slate-300 pl-6">
+                        {dataset.id}
+                      </TableCell>
+                      <TableCell className="font-medium text-white truncate max-w-[220px]">
+                        {dataset.name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="secondary"
+                          className="bg-slate-800 text-slate-300 border-slate-700"
+                        >
+                          {dataset.item_count} items
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm text-slate-400">
+                        {dataset.hash.slice(0, 8)}
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-400">
+                        {formatDate(dataset.createdAt)}
+                      </TableCell>
+                      <TableCell className="text-right pr-6">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setViewingDataset(dataset)}
+                            className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                            title="View"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDownload(dataset.id)}
+                            className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                            title="Download"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={async () => {
+                              const result = await Swal.fire({
+                                title: "Are you sure?",
+                                text: `Delete dataset "${dataset.name}"? This cannot be undone.`,
+                                icon: "warning",
+                                showCancelButton: true,
+                                confirmButtonColor: "#ef4444",
+                                cancelButtonColor: "#334155",
+                                confirmButtonText: "Yes, delete it!",
+                                background: "#0f172a",
+                                color: "#f8fafc",
+                              });
+                              if (result.isConfirmed) {
+                                removeDataset(dataset.id);
+                              }
+                            }}
+                            className="h-8 w-8 text-slate-400 hover:text-red-400 hover:bg-slate-800 cursor-pointer"
+                            title="Delete"
+                          >
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

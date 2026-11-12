@@ -1,14 +1,16 @@
+from datetime import datetime, timedelta, timezone
+
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlmodel import select
 from src.db import SessionDep
-from src.models import Users
+from src.models import RefreshToken, Users
 import jwt
 import os
-from src.utils import createAccessToken, hashPassword, verifyPassword
+from src.utils import create_refresh_token, createAccessToken, hash_refresh_token, hashPassword, verifyPassword
 import requests
 
 router = APIRouter(prefix="/api/auth")
@@ -17,6 +19,7 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 FRONTEND_URL = os.getenv("FRONTEND_URL")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 class LoginData(BaseModel):
     email: str
@@ -37,6 +40,20 @@ async def login(data: LoginData, session: SessionDep, response: Response):
             "email": user.email,
             "name": user.name,
         }
+    )
+    refresh_plain = create_refresh_token()
+    user.refresh_token = hash_refresh_token(refresh_plain)
+    session.add(user)
+    session.commit()
+
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_plain,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=60 * 60 * 24 * 7,
+        path="/api/auth/refresh",
     )
     response.set_cookie(
         key="jwt",
@@ -132,6 +149,20 @@ def google_callback(code: str, session: SessionDep, response: Response):
             "name": userFinal.name,
         }
     )
+    refresh_plain = create_refresh_token()
+    userFinal.refresh_token = hash_refresh_token(refresh_plain)
+    session.add(userFinal)
+    session.commit()
+
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_plain,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=60 * 60 * 24 * 7,
+        path="/api/auth/refresh",
+    )
     response = RedirectResponse(url=f"{FRONTEND_URL}/dashboard/datasets")
     response.set_cookie(
         key="jwt",
@@ -145,23 +176,77 @@ def google_callback(code: str, session: SessionDep, response: Response):
     return response
     
 @router.post("/logout")
-def logout(response: Response):
+def logout(request: Request, response: Response, session: SessionDep):
+    refresh_token = request.cookies.get("refresh_token")
+    if refresh_token:
+        token_hash = hash_refresh_token(refresh_token)
+        stmt = select(Users).where(Users.refresh_token == token_hash)
+        rt = session.exec(stmt).first()
+        if rt:
+            rt.refresh_token = None
+            session.add(rt)
+            session.commit()
+
+    response.delete_cookie(key="jwt", path="/", secure=True, samesite="none")
     response.delete_cookie(
-        key="jwt",
-        secure=True,
-        path="/",
-        samesite="none",
-    )
-    response.set_cookie(
-        key="jwt",
-        value="",
-        expires="Thu, 01 Jan 1970 00:00:00 GMT",
-        max_age=-1,
-        path="/",
-        secure=True,
-        samesite="none",
+        key="refresh_token", path="/api/auth/refresh", secure=True, samesite="none"
     )
     return {"message": "Logged out successfully"}
 
-@app.post("/refresh")
-async def 
+@router.post("/refresh")
+async def getRefreshToken(request: Request, response: Response, session: SessionDep):
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing refresh token",
+        )
+
+    token_hash = hash_refresh_token(refresh_token)
+    stmt = select(Users).where(Users.refresh_token == token_hash)
+    rt = session.exec(stmt).first()
+
+    if not rt:
+        response.delete_cookie(key="jwt", path="/", secure=True, samesite="none")
+        response.delete_cookie(
+            key="refresh_token", path="/api/auth/refresh", secure=True, samesite="none"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    new_plain = create_refresh_token()
+    new_hash = hash_refresh_token(new_plain)
+    rt.refresh_token = new_hash
+    session.add(rt)
+    session.commit()
+
+    new_jwt = createAccessToken(
+        data={
+            "id": rt.id,
+            "email": rt.email,
+            "name": rt.name,
+        }
+    )
+
+    response.set_cookie(
+        key="jwt",
+        value=new_jwt,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=60 * 60 * 24,
+        path="/",
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=new_plain,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=60 * 60 * 24 * REFRESH_TOKEN_EXPIRE_DAYS,
+        path="/api/auth/refresh",
+    )
+
+    return {"message": "Tokens refreshed"}

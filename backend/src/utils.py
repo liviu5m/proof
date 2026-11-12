@@ -14,6 +14,7 @@ from src.db import SessionDep
 from src.models import Users
 import pyclamd
 import asyncio
+import secrets
 
 load_dotenv(verbose=True)
 SECRET_KEY = os.getenv("SECRET_KEY", "")
@@ -42,6 +43,15 @@ def generate6DigitCode():
 def nowPlusMinutes(n: int):
     return datetime.now() + timedelta(minutes=n)
 
+
+def create_refresh_token() -> str:
+    """Generate a random opaque refresh token string."""
+    return secrets.token_urlsafe(32)
+
+
+def hash_refresh_token(token: str) -> str:
+    """Hash the refresh token before storing it in the DB."""
+    return hashlib.sha256(token.encode()).hexdigest()
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24

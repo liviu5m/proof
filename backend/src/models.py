@@ -9,6 +9,7 @@ class Users(SQLModel, table=True):
     email: str = Field(nullable=False, unique=True)
     password: Optional[str] = Field(default=None)
     provider: str = Field(default="credentials", nullable=False) 
+    refresh_token: str = Field(nullable=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
 class Datasets(SQLModel, table=True):

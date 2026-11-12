@@ -23,10 +23,14 @@ import { format, parseISO } from "date-fns";
 export default function RunsPage() {
   const [selectedRun, setSelectedRun] = useState<any | null>(null);
 
-  const { data: runs, isLoading } = useQuery({
+  const { data: runs, isLoading, error: runsError } = useQuery({
     queryKey: ["runs"],
     queryFn: () => getRuns(),
   });
+
+  if (runsError) {
+    toast.error((runsError as any)?.response?.data?.error || "Failed to load runs");
+  }
 
   if (isLoading) {
     return <Loader />;
