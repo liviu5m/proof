@@ -18,7 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/libs/utils";
 import { Mail, Lock, Eye, EyeOff, Globe } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
-import { loginUser } from "@/api/user";
+import { loginUser, resendVerification } from "@/api/user";
 import { AxiosError } from "axios";
 import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
@@ -65,8 +65,24 @@ function LoginForm() {
         (error?.response?.data as any)?.detail ||
         error?.message ||
         "An unexpected error occurred";
+      if (error?.response?.status === 403) {
+        resend({ email });
+        router.push(`/auth/verify-email-sent?email=${encodeURIComponent(email)}`);
+        return;
+      }
       toast.error(errorMessage);
       console.log(error);
+    },
+  });
+
+  const { mutate: resend, isPending: isResending } = useMutation({
+    mutationKey: ["resendVerification"],
+    mutationFn: () => resendVerification({ email }),
+    onSuccess: () => {
+      toast.success("Verification email resent");
+    },
+    onError: () => {
+      toast.error("Failed to resend verification email");
     },
   });
 

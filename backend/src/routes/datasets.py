@@ -4,12 +4,12 @@ import uuid
 import csv
 import io
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from sqlmodel import select
 from src.db import SessionDep, supabase
 from src.models import Datasets, Users
-from src.utils import get_current_user, scan_file, verifyUserTokenSession, sanitize_text
+from src.utils import get_current_user, require_member, require_viewer, scan_file, verifyUserTokenSession, sanitize_text, verify_csrf
 from src.validators import validate_csv_headers, validate_csv_rows, REQUIRED_COLUMNS
 
 from src.rate_limit import rate_limit_datasets
@@ -26,6 +26,8 @@ async def createDataset(
     file: UploadFile = File(...),
     name: str = Form(...),
     user: Users = Depends(get_current_user),
+    _: Users = Depends(require_member),
+    __: Request = Depends(verify_csrf)
     ):
 
     if not file.filename or not file.filename.lower().endswith(".csv"):
@@ -87,6 +89,7 @@ async def getDatasets(
     session: SessionDep,
     user: Users = Depends(get_current_user),
     searchQuery: str = "",
+    _: Users = Depends(require_viewer)
 ):
     stmt = select(Datasets).where(Datasets.user_id == user.id).where(Datasets.deleted_at == None)
     if searchQuery:
@@ -95,7 +98,7 @@ async def getDatasets(
     return [d.model_dump() for d in datasets]
 
 @router.get("/{dataset_id}")
-async def getDataset(dataset_id: int, session: SessionDep, user: Users = Depends(get_current_user)):
+async def getDataset(dataset_id: int, session: SessionDep, user: Users = Depends(get_current_user), _: Users = Depends(require_viewer)):
     stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user.id).where(Datasets.deleted_at == None)
     dataset = session.exec(stmt).first()
     if dataset is None:
@@ -103,7 +106,8 @@ async def getDataset(dataset_id: int, session: SessionDep, user: Users = Depends
     return dataset.model_dump()
 
 @router.delete("/{dataset_id}")
-async def deleteDataset(dataset_id: int, session: SessionDep, user: Users = Depends(get_current_user)):
+async def deleteDataset(dataset_id: int, session: SessionDep, user: Users = Depends(get_current_user), _: Users = Depends(require_member), __: Request = Depends(verify_csrf)):
+    
     stmt = select(Datasets).where(
         Datasets.id == dataset_id,
         Datasets.user_id == user.id,
@@ -118,7 +122,7 @@ async def deleteDataset(dataset_id: int, session: SessionDep, user: Users = Depe
     return {"success": "Dataset deleted"}
 
 @router.get("/{dataset_id}/download")
-async def downloadDataset(dataset_id: int, session: SessionDep, user: Users = Depends(get_current_user)):
+async def downloadDataset(dataset_id: int, session: SessionDep, user: Users = Depends(get_current_user), _: Users = Depends(require_member)):
     stmt = select(Datasets).where(Datasets.id == dataset_id, Datasets.user_id == user.id).where(Datasets.deleted_at == None)
     dataset = session.exec(stmt).first()
     if dataset is None:

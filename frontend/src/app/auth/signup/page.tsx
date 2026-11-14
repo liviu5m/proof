@@ -45,7 +45,7 @@ export default function SignupPage() {
       setPassword("");
       setConfirmPassword("");
 
-      router.push("/auth/login");
+      router.push(`/auth/verify-email-sent?email=${encodeURIComponent(email)}`);
     },
     onError: (error: AxiosError) => {
       const errorMessage =

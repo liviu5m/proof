@@ -4,6 +4,8 @@ export interface User {
   name: string;
   created_at: string;
   avatar_url?: string;
+  verified: boolean;
+  role: string;
 }
 
 export interface AuthState {

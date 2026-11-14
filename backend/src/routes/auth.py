@@ -7,11 +7,12 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlmodel import select
 from src.db import SessionDep
-from src.models import RefreshToken, Users
+from src.models import EmailVerifications, PasswordResetTokens, RefreshTokens, Users
 import jwt
 import os
-from src.utils import create_refresh_token, createAccessToken, hash_refresh_token, hashPassword, verifyPassword
+from src.utils import create_token, createAccessToken, hash_token, hashPassword, verifyPassword, verify_csrf
 import requests
+from src.mailer import send_email_verification, send_password_reset_email
 
 router = APIRouter(prefix="/api/auth")
 load_dotenv()
@@ -27,44 +28,76 @@ class LoginData(BaseModel):
 
 @router.post("/login")
 async def login(data: LoginData, session: SessionDep, response: Response):
-    stmt = select(Users).where(Users.email == data.email)
-    user = session.exec(stmt).first()
+    try:
+        stmt = select(Users).where(Users.email == data.email)
+        user = session.exec(stmt).first()
 
-    if not user:
-        raise HTTPException(status_code=400, detail="Incorrect email or password")
-    if not verifyPassword(data.password, user.password):
-        raise HTTPException(status_code=400, detail="Passwords do not match.")
-    jwt = createAccessToken(
-        data={
-            "id": user.id,
-            "email": user.email,
-            "name": user.name,
-        }
-    )
-    refresh_plain = create_refresh_token()
-    user.refresh_token = hash_refresh_token(refresh_plain)
-    session.add(user)
-    session.commit()
+        if not user:
+            raise HTTPException(status_code=400, detail="Incorrect email or password")
 
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_plain,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        max_age=60 * 60 * 24 * 7,
-        path="/api/auth/refresh",
-    )
-    response.set_cookie(
-        key="jwt",
-        value=jwt,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        max_age=60 * 60 * 24,
-        path="/",
-    )
-    return {"message": "User logged in successfully"}
+        if user.provider != "credentials":
+            raise HTTPException(
+                status_code=400,
+                detail=f"This account was created with {user.provider}. Please sign in with {user.provider}.",
+            )
+
+        if not user.password:
+            raise HTTPException(
+                status_code=400,
+                detail="No password set for this account. Please reset your password.",
+            )
+
+        if not verifyPassword(data.password, user.password):
+            raise HTTPException(status_code=400, detail="Passwords do not match.")
+
+        if not user.verified:
+            raise HTTPException(
+                status_code=403,
+                detail="Email not verified. Please verify your email before logging in.",
+            )
+
+        jwt = createAccessToken(
+            data={
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "role": user.role.value,
+            }
+        )
+        refresh_plain = create_token()
+        refresh_token_row = RefreshTokens(
+            user_id=user.id,
+            token_hash=hash_token(refresh_plain),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+            revoked=False,
+        )
+        session.add(refresh_token_row)
+        session.commit()
+
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_plain,
+            httponly=True,
+            secure=True,
+            samesite="none",
+            max_age=60 * 60 * 24 * 7,
+            path="/api/auth/refresh",
+        )
+        response.set_cookie(
+            key="jwt",
+            value=jwt,
+            httponly=True,
+            secure=True,
+            samesite="none",
+            max_age=60 * 60 * 24,
+            path="/",
+        )
+        return {"message": "User logged in successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"LOGIN ERROR: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="Login failed. Please try again.")
 
 class RegisterData(BaseModel):
     name: str
@@ -73,7 +106,7 @@ class RegisterData(BaseModel):
     passwordConfirmation: str
 
 @router.post("/register")
-async def register(data: RegisterData, session: SessionDep):
+async def register(data: RegisterData, session: SessionDep, _: Request = Depends(verify_csrf)):
     stmt = select(Users).where(Users.email == data.email)
     user = session.exec(stmt).first()
     if data.password != data.passwordConfirmation:
@@ -84,9 +117,102 @@ async def register(data: RegisterData, session: SessionDep):
         raise HTTPException(status_code=400, detail="Password is too short")
     hashed_password = hashPassword(data.password)
     user = Users(email=data.email, password=hashed_password, name=data.name)
+    token = create_token()
     session.add(user)
     session.commit()
+    session.refresh(user)
+    token = create_token()
+    email_verification= EmailVerifications(user_id=user.id, token_hash=hash_token(token), expires_at=datetime.now(timezone.utc)+timedelta(minutes=5))
+    session.add(email_verification)
+    session.commit()
+    try:
+        await send_email_verification(user, token)
+    except Exception as e:
+        print(f"Email send failed: {e}")
     return {"message": "User registered successfully"}
+
+class ResendData(BaseModel):
+    email: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+
+class ConfirmResetData(BaseModel):
+    token: str
+    new_password: str
+
+@router.post("/resend-verification")
+async def resend(data: ResendData, session: SessionDep, _: Request = Depends(verify_csrf)):
+    stmt = select(Users).where(Users.email == data.email)
+    user = session.exec(stmt).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.verified:
+        raise HTTPException(status_code=400, detail="Email already verified")
+    token = create_token()
+    email_verification= EmailVerifications(user_id=user.id, token_hash=hash_token(token), expires_at=datetime.now(timezone.utc)+timedelta(minutes=5))
+    session.add(email_verification)
+    session.commit()
+
+    try:
+        await send_email_verification(user, token)
+    except Exception as e:
+        print(f"Email send failed: {e}")
+    return {"message": "Email sent successfully"}
+
+
+@router.post("/password-reset/request")
+async def request_password_reset(data: PasswordResetRequest, session: SessionDep, _: Request = Depends(verify_csrf)):
+    stmt = select(Users).where(Users.email == data.email)
+    user = session.exec(stmt).first()
+    if not user:
+        return {"message": "If the email exists, a reset link has been sent"}
+
+    token = create_token()
+    reset_token = PasswordResetTokens(
+        user_id=user.id,
+        token_hash=hash_token(token),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+    )
+    session.add(reset_token)
+    session.commit()
+
+    try:
+        await send_password_reset_email(user, token)
+    except Exception as e:
+        print(f"Password reset email send failed: {e}")
+
+    return {"message": "If the email exists, a reset link has been sent"}
+
+
+@router.post("/password-reset/confirm")
+async def confirm_password_reset(data: ConfirmResetData, session: SessionDep, _: Request = Depends(verify_csrf)):
+    token_hash = hash_token(data.token)
+    stmt = select(PasswordResetTokens).where(
+        PasswordResetTokens.token_hash == token_hash
+    )
+    reset_token = session.exec(stmt).first()
+
+    if not reset_token:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    if reset_token.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Token expired")
+    if reset_token.used:
+        raise HTTPException(status_code=400, detail="Token already used")
+
+    user = session.get(Users, reset_token.user_id)
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+
+    user.password = hashPassword(data.new_password)
+    reset_token.used = True
+    session.add(user)
+    session.add(reset_token)
+    session.commit()
+
+    return {"message": "Password reset successfully"}
 
 @router.get("/google")
 async def google(response: Response):
@@ -136,7 +262,7 @@ def google_callback(code: str, session: SessionDep, response: Response):
     elif user:
         userFinal = user
     else:
-        userFinal = Users(email=email, name=name, provider="google")
+        userFinal = Users(email=email, name=name, provider="google", verified=True)
         session.add(userFinal)
         session.commit()
         session.refresh(userFinal)
@@ -147,11 +273,17 @@ def google_callback(code: str, session: SessionDep, response: Response):
             "id": userFinal.id,
             "email": userFinal.email,
             "name": userFinal.name,
+            "role": userFinal.role.value,
         }
     )
-    refresh_plain = create_refresh_token()
-    userFinal.refresh_token = hash_refresh_token(refresh_plain)
-    session.add(userFinal)
+    refresh_plain = create_token()
+    refresh_token_row = RefreshTokens(
+        user_id=userFinal.id,
+        token_hash=hash_token(refresh_plain),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        revoked=False,
+    )
+    session.add(refresh_token_row)
     session.commit()
 
     response.set_cookie(
@@ -180,10 +312,10 @@ def logout(request: Request, response: Response, session: SessionDep):
     refresh_token = request.cookies.get("refresh_token")
     if refresh_token:
         token_hash = hash_refresh_token(refresh_token)
-        stmt = select(Users).where(Users.refresh_token == token_hash)
+        stmt = select(RefreshTokens).where(RefreshTokens.token_hash == token_hash)
         rt = session.exec(stmt).first()
         if rt:
-            rt.refresh_token = None
+            rt.revoked = True
             session.add(rt)
             session.commit()
 
@@ -202,11 +334,11 @@ async def getRefreshToken(request: Request, response: Response, session: Session
             detail="Missing refresh token",
         )
 
-    token_hash = hash_refresh_token(refresh_token)
-    stmt = select(Users).where(Users.refresh_token == token_hash)
+    token_hash = hash_token(refresh_token)
+    stmt = select(RefreshTokens).where(RefreshTokens.token_hash == token_hash)
     rt = session.exec(stmt).first()
 
-    if not rt:
+    if not rt or rt.revoked:
         response.delete_cookie(key="jwt", path="/", secure=True, samesite="none")
         response.delete_cookie(
             key="refresh_token", path="/api/auth/refresh", secure=True, samesite="none"
@@ -216,17 +348,52 @@ async def getRefreshToken(request: Request, response: Response, session: Session
             detail="Invalid or expired refresh token",
         )
 
-    new_plain = create_refresh_token()
-    new_hash = hash_refresh_token(new_plain)
-    rt.refresh_token = new_hash
+    # Check expiry
+    if rt.expires_at < datetime.now(timezone.utc):
+        rt.revoked = True
+        session.add(rt)
+        session.commit()
+        response.delete_cookie(key="jwt", path="/", secure=True, samesite="none")
+        response.delete_cookie(
+            key="refresh_token", path="/api/auth/refresh", secure=True, samesite="none"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token expired",
+        )
+
+    user = session.get(Users, rt.user_id)
+    if not user:
+        response.delete_cookie(key="jwt", path="/", secure=True, samesite="none")
+        response.delete_cookie(
+            key="refresh_token", path="/api/auth/refresh", secure=True, samesite="none"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    # Revoke old token and create new one (rotation)
+    rt.revoked = True
     session.add(rt)
+
+    new_plain = create_token()
+    new_hash = hash_token(new_plain)
+    new_rt = RefreshTokens(
+        user_id=user.id,
+        token_hash=new_hash,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        revoked=False,
+    )
+    session.add(new_rt)
     session.commit()
 
     new_jwt = createAccessToken(
         data={
-            "id": rt.id,
-            "email": rt.email,
-            "name": rt.name,
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role.value,
         }
     )
 
@@ -250,3 +417,30 @@ async def getRefreshToken(request: Request, response: Response, session: Session
     )
 
     return {"message": "Tokens refreshed"}
+
+@router.post("/email-verification")
+async def verify_email(data: dict, session: SessionDep):
+    token = data.get("token")
+    if not token:
+        raise HTTPException(status_code=400, detail="Token required")
+
+    token_hash = hash_token(token)
+    stmt = select(EmailVerifications).where(EmailVerifications.token_hash == token_hash)
+    ev = session.exec(stmt).first()
+
+    if not ev or ev.used:
+        raise HTTPException(status_code=400, detail="Invalid or used token")
+    if ev.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Token expired")
+
+    user = session.get(Users, ev.user_id)
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+
+    user.verified = True
+    ev.used = True
+    session.add(user)
+    session.add(ev)
+    session.commit()
+
+    return {"message": "Email verified successfully. You can now log in."}

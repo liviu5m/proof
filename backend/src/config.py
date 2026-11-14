@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: Optional[str] = None
     FRONTEND_URL: Optional[str] = None
     REDIRECT_URI: Optional[str] = None
+    RESEND_API_KEY: Optional[str] = None
+    BREVO_API_KEY: Optional[str] = None
+    FROM_EMAIL: Optional[str] = None
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"
     MAX_CONCURRENT_RUNS: int = 5

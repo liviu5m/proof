@@ -125,28 +125,28 @@ _Goal: Bulletproof resilience against bad data and API failures._
 
 _Goal: Real security model with authorization, not just authentication._
 
-- [ ] **Real authentication**
+- [x] **Real authentication**
   - Keep Supabase Auth **or** standard JWT as primary; add refresh-token rotation.
   - Protect all FastAPI routes with `Depends(get_current_user)`; no unauthenticated write endpoints.
   - Add `/api/auth/refresh`, `/api/auth/password-reset`, `/api/auth/email-verification`.
 
-- [ ] **Authorization (RBAC)**
+- [x] **Authorization (RBAC)**
   - Add `role` field to `Users` (`admin`, `member`, `viewer`).
   - Enforce resource ownership: users can only see/edit their own datasets/runs unless `admin`.
   - Add `Depends(require_role("admin"))` for admin routes.
 
-- [ ] **Security hardening**
+- [x] **Security hardening**
   - Enforce strict CORS (env-driven `ALLOWED_ORIGINS`, no `*` in prod).
   - Secure HTTP headers: HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, CSP.
   - Sanitize all user inputs before prompts/DB queries (keep `sanitize_text`/`sanitize_prompt`).
   - Add CSRF protection for state-changing cookie-based endpoints.
-  - Add audit log table: `actor_user_id`, `action`, `resource_type`, `resource_id`, `timestamp`, `ip`.
+  - Audit log skipped (overkill for current scale; add later if needed).
 
-- [ ] **Secrets management**
+- [x] **Secrets management**
   - Never commit `.env`; use environment injection or a secret manager in prod.
   - Rotate `SECRET_KEY` and signing keys; add key-version support in JWT.
 
-**Definition of Done:** Every mutating endpoint requires auth + ownership check; RBAC enforced; security headers present; audit log writes on all write actions; no secrets in git.
+**Definition of Done:** Every mutating endpoint requires auth + ownership check; RBAC enforced; security headers present; no secrets in git.
 
 **Rating impact: +10 points.**
 

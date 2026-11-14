@@ -3,18 +3,20 @@ import os
 import re
 import html
 from dotenv import load_dotenv
-from fastapi import HTTPException, Request, UploadFile, status, WebSocket
+from fastapi import Depends, HTTPException, Request, UploadFile, status, WebSocket
 from passlib.context import CryptContext
+import bcrypt
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import jwt
 from sqlmodel import select
 from src.db import SessionDep
-from src.models import Users
+from src.models import ProofUserRole, Users
 import pyclamd
 import asyncio
 import secrets
+from src.config import settings
 
 load_dotenv(verbose=True)
 SECRET_KEY = os.getenv("SECRET_KEY", "")
@@ -27,13 +29,11 @@ def get_file_hash(filepath: str) -> str:
             sha256.update(chunk)
     return sha256.hexdigest()
 
+def hashPassword(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
-def hashPassword(password: str):
-    return pwd_context.hash(password)
-
-
-def verifyPassword(plainPassword, hashedPassword):
-    return pwd_context.verify(plainPassword, hashedPassword)
+def verifyPassword(plainPassword, hashedPassword) -> bool:
+    return bcrypt.checkpw(plainPassword.encode("utf-8"), hashedPassword.encode("utf-8"))
 
 
 def generate6DigitCode():
@@ -44,14 +44,15 @@ def nowPlusMinutes(n: int):
     return datetime.now() + timedelta(minutes=n)
 
 
-def create_refresh_token() -> str:
+def create_token() -> str:
     """Generate a random opaque refresh token string."""
     return secrets.token_urlsafe(32)
 
 
-def hash_refresh_token(token: str) -> str:
+def hash_token(token: str) -> str:
     """Hash the refresh token before storing it in the DB."""
     return hashlib.sha256(token.encode()).hexdigest()
+
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
@@ -177,8 +178,48 @@ async def scan_file(file: UploadFile):
                     detail={"error": f"Malicious file detected: {virus_name}", "code": "virus_detected"}
                 )
     except ConnectionError:
-        # ClamAV not running locally — skip virus scan in dev
         pass
     except Exception:
-        # Any other scan error — don't block uploads in development
         pass
+
+
+async def get_current_active_user(current_user: Users = Depends(get_current_user)):
+    return current_user
+
+def transformRole(role: ProofUserRole):
+    if role == ProofUserRole.VIEWER:
+        return 1
+    elif role == ProofUserRole.MEMBER:
+        return 2
+    elif role == ProofUserRole.ADMIN:
+        return 3
+
+def require_role(required_role: ProofUserRole):
+    """Dependency that requires a specific role or higher."""
+    def role_checker(current_user: Users = Depends(get_current_user)):
+        if current_user.role == ProofUserRole.ADMIN:
+            return current_user
+        
+        if transformRole(current_user.role) < transformRole(required_role):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires {required_role.value} role",
+            )
+        return current_user
+    return role_checker
+
+
+require_admin = require_role(ProofUserRole.ADMIN)
+require_member = require_role(ProofUserRole.MEMBER)
+require_viewer = require_role(ProofUserRole.VIEWER)
+
+
+def verify_csrf(request: Request):
+    origin = request.headers.get("origin")
+    referer = request.headers.get("referer")
+    allowed = settings.FRONTEND_URL
+
+    if origin and origin != allowed:
+        raise HTTPException(status_code=403, detail="Invalid origin")
+    if referer and not referer.startswith(allowed):
+        raise HTTPException(status_code=403, detail="Invalid referer")

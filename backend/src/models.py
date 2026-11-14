@@ -1,6 +1,13 @@
+from enum import Enum
 from datetime import datetime, timezone
 from sqlmodel import Field, SQLModel
 from typing import Optional
+
+
+class ProofUserRole(str, Enum):
+    ADMIN = "admin"
+    MEMBER = "member"
+    VIEWER = "viewer"
 
 class Users(SQLModel, table=True):
     __tablename__ = "users"
@@ -8,8 +15,9 @@ class Users(SQLModel, table=True):
     name: str = Field(nullable=False)
     email: str = Field(nullable=False, unique=True)
     password: Optional[str] = Field(default=None)
-    provider: str = Field(default="credentials", nullable=False) 
-    refresh_token: str = Field(nullable=True)
+    provider: str = Field(default="credentials", nullable=False)
+    role: ProofUserRole = Field(default=ProofUserRole.MEMBER, nullable=False)
+    verified: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
 class Datasets(SQLModel, table=True):
@@ -49,12 +57,29 @@ class Results(SQLModel, table=True):
     deleted_at: Optional[datetime] = Field(default=None)
 
 
-class RefreshToken(SQLModel, table=True):
+class RefreshTokens(SQLModel, table=True):
     __tablename__ = "refresh_tokens"
-    
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", nullable=False)
-    token_hash: str = Field(nullable=False, unique=True)  
+    token_hash: str = Field(nullable=False, unique=True)
     expires_at: datetime = Field(nullable=False)
     revoked: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class EmailVerifications(SQLModel, table=True):
+    __tablename__ = "email_verifications"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", nullable=False)
+    token_hash: str = Field(nullable=False, unique=True)
+    expires_at: datetime = Field(nullable=False)
+    used: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class PasswordResetTokens(SQLModel, table=True):
+    __tablename__ = "password_reset_token"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", nullable=False)
+    token_hash: str = Field(nullable=False, unique=True)
+    expires_at: datetime = Field(nullable=False)
+    used: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

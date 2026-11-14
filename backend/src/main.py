@@ -14,19 +14,30 @@ from src.routes.datasets import router as datasetsRouter
 from src.routes.runs import router as runsRouter
 import os
 from src.config import settings
+from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import Request, Response
 
 load_dotenv()
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
+    allow_origins=[settings.FRONTEND_URL],  
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
 
+app.add_middleware(SecurityHeadersMiddleware)
 @app.on_event("startup")
 async def validate_config():
     """Fail fast if required config is missing."""
