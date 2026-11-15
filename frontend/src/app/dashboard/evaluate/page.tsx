@@ -22,6 +22,11 @@ import {
   ChevronDown,
   Search,
   Upload,
+  Filter,
+  RefreshCw,
+  Galaxy,
+  Zap,
+  Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import Loader from "@/components/Loader";
@@ -29,49 +34,84 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getDatasets } from "@/api/datasets";
 import { Dataset } from "@/types";
 import { createRun } from "@/api/run";
+import { getModels, syncModels } from "@/api/models";
+import { ModelCatalogItem } from "@/api/models";
 
-const availableModels = [
-  {
-    id: "gemini-3.5-flash-lite",
-    name: "Gemini 3.5 Flash Lite (Recommended)",
-    provider: "Google",
-  },
-  { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google" },
-  { id: "gpt-4o", name: "GPT-4o", provider: "OpenAI" },
-  { id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic" },
+const PROVIDER_OPTIONS = [
+  { value: "google", label: "Google", color: "text-indigo-400", bg: "bg-indigo-500/10" },
+  { value: "openai", label: "OpenAI", color: "text-slate-300", bg: "bg-slate-500/10" },
+  { value: "anthropic", label: "Anthropic", color: "text-indigo-300", bg: "bg-indigo-500/10" },
+  { value: "ollama", label: "Ollama", color: "text-emerald-400", bg: "bg-emerald-500/10" },
 ];
 
 export default function EvaluatePage() {
   const [datasetSearch, setDatasetSearch] = useState("");
-  const { data: datasets, isLoading, error: datasetsError } = useQuery({
+  const [selectedDataset, setSelectedDataset] = useState<number>(0);
+  const queryClient = useQueryClient();
+  const [modelName, setModelName] = useState("gemini-3.5-flash-lite");
+  const [judgemodelName, setJudgeModelName] = useState("gemini-3.5-flash-lite");
+  const [providerName, setProviderName] = useState("google");
+  const [judgeProviderName, setJudgeProviderName] = useState("google");
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
+  const [ollamaBaseUrlJudge, setOllamaBaseUrlJudge] = useState("http://localhost:11434");
+  const [modelSearch, setModelSearch] = useState("");
+  const [judgeModelSearch, setJudgeModelSearch] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState(
+    "You are an expert AI judge evaluating responses based on accuracy, helpfulness, and tone.",
+  );
+  const [judgeSystemPrompt, setJudgeSystemPrompt] = useState(
+    "You are an expert AI judge evaluating responses based on accuracy, helpfulness, and tone.",
+  );
+
+  const { data: datasets, isLoading: datasetsLoading, error: datasetsError } = useQuery({
     queryKey: ["datasets", datasetSearch],
     queryFn: () => getDatasets(datasetSearch),
   });
 
-  if (datasetsError) {
-    toast.error(
-      (datasetsError as any)?.response?.data?.error || "Failed to load datasets"
-    );
-  }
+  const { data: allModels = [], isLoading: modelsLoading, refetch: refetchModels } = useQuery({
+    queryKey: ["models"],
+    queryFn: () => getModels(),
+  });
 
-  const [selectedDataset, setSelectedDataset] = useState<number>(0);
-  const queryClient = useQueryClient();
-  const [isDatasetOpen, setIsDatasetOpen] = useState(false);
-  const [modelName, setModelName] = useState("gemini-3.5-flash-lite");
-  const [judgemodelName, setJudgeModelName] = useState("gemini-3.5-flash-lite");
-  const [systemPrompt, setSystemPrompt] = useState(
-    "You are an expert AI judge evaluating responses based on accuracy, helpfulness, and tone.",
-  );
+  const syncMutation = useMutation({
+    mutationFn: syncModels,
+    onSuccess: (data) => {
+      if (data.errors && data.errors.length > 0) {
+        const errorMsg = data.errors
+          .map((e: any) => Object.entries(e).map(([k, v]) => `${k}: ${v}`).join(", "))
+          .join("; ");
+        toast.warning(`Models synced (${data.count}). Some providers failed: ${errorMsg}`);
+      } else {
+        toast.success(`Models synced successfully (${data.count} models)`);
+      }
+      refetchModels();
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || "Failed to sync models");
+    },
+  });
+
+  const filteredRunnerModels = allModels.filter((m: ModelCatalogItem) => {
+    const matchesProvider = m.provider === providerName;
+    const matchesSearch =
+      m.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
+      m.id.toLowerCase().includes(modelSearch.toLowerCase());
+    return matchesProvider && matchesSearch;
+  });
+
+  const filteredJudgeModels = allModels.filter((m: ModelCatalogItem) => {
+    const matchesProvider = m.provider === judgeProviderName;
+    const matchesSearch =
+      m.name.toLowerCase().includes(judgeModelSearch.toLowerCase()) ||
+      m.id.toLowerCase().includes(judgeModelSearch.toLowerCase());
+    return matchesProvider && matchesSearch;
+  });
 
   useEffect(() => {
     if (datasets && datasets.length > 0 && (!selectedDataset || !datasets.some((d: Dataset) => d.id === selectedDataset))) {
       setSelectedDataset(datasets[0].id);
     }
   }, [datasets, selectedDataset]);
-
-  const currentDatasetObj = datasets
-    ? datasets.find((d: Dataset) => d.id === selectedDataset) || datasets[0]
-    : null;
 
   const { mutate: runEvaluation, isPending } = useMutation({
     mutationKey: ["runEvaluation"],
@@ -81,6 +121,10 @@ export default function EvaluatePage() {
         model: modelName,
         system_prompt: systemPrompt,
         judge_model: judgemodelName,
+        provider: providerName,
+        judge_provider: judgeProviderName,
+        ollama_base_url: providerName === "ollama" ? ollamaBaseUrl : undefined,
+        ollama_base_url_judge: judgeProviderName === "ollama" ? ollamaBaseUrlJudge : undefined,
       }),
     onSuccess: (data) => {
       console.log(data);
@@ -94,221 +138,249 @@ export default function EvaluatePage() {
     },
   });
 
-  if (isLoading) {
-    return <Loader />;
-  }
-
-  if (isPending) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6">
-        <Loader />
-        <div className="text-center space-y-2">
-          <h2 className="text-xl font-bold text-white">
-            Running Evaluation...
-          </h2>
-          <p className="text-sm text-slate-400">
-            Evaluating prompts against {modelName}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!datasets || datasets.length === 0) {
-    return (
-      <div className="space-y-6 animate-in fade-in-50 duration-500 max-w-4xl mx-auto">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
-            <PlayCircle className="h-8 w-8 text-lime-500" /> New Evaluation Run
-          </h1>
-          <p className="text-slate-400 mt-1">
-            Configure dataset, model, and judge prompts to execute a new
-            evaluation.
-          </p>
-        </div>
-        <Card className="bg-slate-900/80 border-slate-800/30 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
-          <CardContent className="flex flex-col items-center justify-center py-16 px-4 text-center space-y-4">
-            <div className="bg-slate-800/50 p-4 rounded-full text-slate-400">
-              <Database className="h-8 w-8" />
-            </div>
-            <h3 className="text-lg font-semibold text-white">No datasets available</h3>
-            <p className="text-sm text-slate-400 max-w-sm">
-              You need to upload at least one evaluation dataset before running evaluations.
-            </p>
-            <Button
-              asChild
-              className="gap-2 bg-lime-500 hover:bg-lime-400 text-slate-950 font-semibold cursor-pointer"
-            >
-              <Link href="/dashboard/datasets">
-                <Upload className="h-4 w-4" /> Go to Datasets
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6 animate-in fade-in-50 duration-500 max-w-4xl mx-auto">
+    <div className="space-y-6 animate-in fade-in-50 duration-500 max-w-5xl mx-auto">
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
-          <PlayCircle className="h-8 w-8 text-lime-500" /> New Evaluation Run
+          <Zap className="h-8 w-8 text-lime-500" /> Model Configuration
         </h1>
         <p className="text-slate-400 mt-1">
-          Configure dataset, model, and judge prompts to execute a new
-          evaluation.
+          Choose runner and judge models. Each can use a different provider.
         </p>
       </div>
 
-      <Card className="bg-slate-900/80 border-slate-800/30 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
-        <CardHeader className="border-b border-slate-800/30 px-6 py-5">
-          <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-indigo-400" /> Evaluation
-            Configuration
-          </CardTitle>
-          <CardDescription className="text-slate-400">
-            Select inputs and parameters for your LLM benchmark run.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-6 space-y-6">
-          <div className="space-y-2 relative">
-            <Label className="text-slate-300 font-medium">Select Dataset</Label>
-            <div
-              onClick={() => setIsDatasetOpen(!isDatasetOpen)}
-              className="w-full px-4 py-3 bg-slate-950/60 border border-slate-800/60 rounded-xl text-white text-sm flex items-center justify-between cursor-pointer hover:border-slate-700 transition-all"
-            >
-              <div className="flex items-center gap-3">
-                <Database className="h-4 w-4 text-indigo-400" />
-                <span className="font-medium">
-                  {currentDatasetObj?.name} ({currentDatasetObj?.item_count}{" "}
-                  items)
-                </span>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Runner Model Card */}
+        <Card className="bg-slate-900/80 border-slate-800/30 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
+          <CardHeader className="border-b border-slate-800/30 px-6 py-4">
+            <CardTitle className="text-base font-semibold text-white flex items-center gap-2">
+              <Cpu className="h-4 w-4 text-indigo-400" /> Runner Model
+            </CardTitle>
+            <CardDescription className="text-slate-500 text-sm">
+              Model that generates answers
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-6 space-y-5">
+            <div className="space-y-2">
+              <Label className="text-slate-300 font-medium">Provider</Label>
+              <div className="relative">
+                <select
+                  value={providerName}
+                  onChange={(e) => setProviderName(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-950/60 border border-slate-800/60 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  {PROVIDER_OPTIONS.map((p) => (
+                    <option key={p.value} value={p.value} className={p.bg}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <ChevronDown
-                className={`h-4 w-4 text-slate-400 transition-transform ${isDatasetOpen ? "rotate-180" : ""}`}
-              />
             </div>
 
-            {isDatasetOpen && (
-              <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-3 space-y-3 animate-in fade-in-50">
+            {providerName === "ollama" && (
+              <div className="space-y-2">
+                <Label className="text-slate-300 font-medium">Ollama Base URL</Label>
                 <div className="relative">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Galaxy className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
-                    value={datasetSearch}
-                    onChange={(e) => setDatasetSearch(e.target.value)}
-                    placeholder="Search datasets..."
-                    className="pl-10 bg-slate-950 border-slate-800 text-white text-xs h-9"
-                    autoFocus
+                    placeholder="http://localhost:11434"
+                    value={ollamaBaseUrl}
+                    onChange={(e) => setOllamaBaseUrl(e.target.value)}
+                    className="bg-slate-950/60 border border-slate-800 text-white text-sm h-10"
                   />
                 </div>
-                <div className="max-h-60 overflow-y-auto space-y-1 pr-1">
-                  {datasets.map((ds: Dataset) => (
-                    <div
-                      key={ds.id}
-                      onClick={() => {
-                        setSelectedDataset(ds.id);
-                        setIsDatasetOpen(false);
-                        setDatasetSearch("");
-                      }}
-                      className={`px-3 py-2.5 rounded-lg text-sm cursor-pointer flex items-center justify-between transition-all ${
-                        selectedDataset === ds.id
-                          ? "bg-indigo-950/60 text-indigo-300 font-semibold"
-                          : "text-slate-300 hover:bg-slate-800/60 hover:text-white"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Database className="h-4 w-4 text-indigo-400" />
-                        <span>{ds.name}</span>
-                        <span className="text-xs text-slate-500">
-                          ({ds.item_count} items)
-                        </span>
-                      </div>
-                      {selectedDataset === ds.id && (
-                        <Check className="h-4 w-4 text-lime-400" />
-                      )}
-                    </div>
-                  ))}
-                  {datasets.length === 0 && (
-                    <p className="text-xs text-slate-500 text-center py-4">
-                      No matching datasets found.
-                    </p>
-                  )}
-                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Your local Ollama instance URL
+                </p>
               </div>
             )}
-          </div>
 
-          <div className="space-y-2">
-            <Label className="text-slate-300 font-medium">
-              Target LLM Model
-            </Label>
             <div className="relative">
-              <Cpu className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10 pointer-events-none" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                value={modelSearch}
+                onChange={(e) => setModelSearch(e.target.value)}
+                placeholder="Search models..."
+                className="pl-10 bg-slate-950 border-slate-800 text-white text-sm h-10"
+              />
+            </div>
+            <div className="relative">
+              <Galaxy className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <select
                 value={modelName}
                 onChange={(e) => setModelName(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-950/60 border border-slate-800/60 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500 cursor-pointer"
+                className="w-full pl-10 pr-4 py-3 bg-slate-950/60 border border-slate-800/60 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500 cursor-pointer"
               >
-                {availableModels.map((m) => (
-                  <option
-                    key={m.id}
-                    value={m.id}
-                    className="bg-slate-900 text-white"
-                  >
-                    {m.name} ({m.provider})
+                {filteredRunnerModels.length === 0 ? (
+                  <option disabled value="" className="text-slate-500">
+                    No models found. Sync models first.
                   </option>
-                ))}
+                ) : (
+                  filteredRunnerModels.map((m: ModelCatalogItem) => (
+                    <option key={m.id} value={m.id} className="bg-slate-900 text-white">
+                      {m.name} ({m.provider})
+                    </option>
+                  ))
+                )}
               </select>
             </div>
-          </div>
+            {filteredRunnerModels.length > 0 && (
+              <p className="text-xs text-slate-500">
+                {filteredRunnerModels.length} model{filteredRunnerModels.length !== 1 ? "s" : ""} available
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
-          <div className="space-y-2">
-            <Label className="text-slate-300 font-medium">
-              Target LLM Judge Model
-            </Label>
+        {/* Judge Model Card */}
+        <Card className="bg-slate-900/80 border-slate-800/30 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
+          <CardHeader className="border-b border-slate-800/30 px-6 py-4">
+            <CardTitle className="text-base font-semibold text-white flex items-center gap-2">
+              <Wand2 className="h-4 w-4 text-purple-400" /> Judge Model
+            </CardTitle>
+            <CardDescription className="text-slate-500 text-sm">
+              Model that evaluates answers
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-6 space-y-5">
+            <div className="space-y-2">
+              <Label className="text-slate-300 font-medium">Provider</Label>
+              <div className="relative">
+                <select
+                  value={judgeProviderName}
+                  onChange={(e) => setJudgeProviderName(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-950/60 border border-slate-800/60 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  {PROVIDER_OPTIONS.map((p) => (
+                    <option key={p.value} value={p.value} className={p.bg}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {judgeProviderName === "ollama" && (
+              <div className="space-y-2">
+                <Label className="text-slate-300 font-medium">Ollama Base URL</Label>
+                <div className="relative">
+                  <Galaxy className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    placeholder="http://localhost:11434"
+                    value={ollamaBaseUrlJudge}
+                    onChange={(e) => setOllamaBaseUrlJudge(e.target.value)}
+                    className="bg-slate-950/60 border border-slate-800 text-white text-sm h-10"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Your local Ollama instance URL
+                </p>
+              </div>
+            )}
+
             <div className="relative">
-              <Cpu className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10 pointer-events-none" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                value={judgeModelSearch}
+                onChange={(e) => setJudgeModelSearch(e.target.value)}
+                placeholder="Search models..."
+                className="pl-10 bg-slate-950 border-slate-800 text-white text-sm h-10"
+              />
+            </div>
+            <div className="relative">
+              <Galaxy className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <select
                 value={judgemodelName}
                 onChange={(e) => setJudgeModelName(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-950/60 border border-slate-800/60 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500 cursor-pointer"
+                className="w-full pl-10 pr-4 py-3 bg-slate-950/60 border border-slate-800/60 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500 cursor-pointer"
               >
-                {availableModels.map((m) => (
-                  <option
-                    key={m.id}
-                    value={m.id}
-                    className="bg-slate-900 text-white"
-                  >
-                    {m.name} ({m.provider})
+                {filteredJudgeModels.length === 0 ? (
+                  <option disabled value="" className="text-slate-500">
+                    No models found. Sync models first.
                   </option>
-                ))}
+                ) : (
+                  filteredJudgeModels.map((m: ModelCatalogItem) => (
+                    <option key={m.id} value={m.id} className="bg-slate-900 text-white">
+                      {m.name} ({m.provider})
+                    </option>
+                  ))
+                )}
               </select>
+            </div>
+            {filteredJudgeModels.length > 0 && (
+              <p className="text-xs text-slate-500">
+                {filteredJudgeModels.length} model{filteredJudgeModels.length !== 1 ? "s" : ""} available
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="bg-slate-900/80 border-slate-800/30 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
+        <CardHeader className="border-b border-slate-800/30 px-6 py-4">
+          <CardTitle className="text-base font-semibold text-white flex items-center gap-2">
+            <Database className="h-4 w-4 text-lime-400" /> Dataset & Prompt
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label className="text-slate-300 font-medium">Dataset</Label>
+              <div className="relative">
+                <button
+                  className="w-full flex items-center justify-between pl-3 pr-4 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-white text-sm hover:bg-slate-800/50 focus:outline-none focus:border-indigo-500"
+                >
+                  <span>
+                    {selectedDataset > 0
+                      ? datasets?.find((d: Dataset) => d.id === selectedDataset)?.name || "Select dataset"
+                      : "Select dataset"}
+                  </span>
+                  <ChevronDown className="h-4 w-4 text-slate-400" />
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-slate-300 font-medium">System Prompt</Label>
+              <Textarea
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                className="bg-slate-950/60 border border-slate-800 text-white min-h-[120px] resize-none"
+                placeholder="Enter system prompt for runner..."
+              />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label className="text-slate-300 font-medium">
-              AI Judge System Prompt
-            </Label>
+            <Label className="text-slate-300 font-medium">AI Judge System Prompt</Label>
             <Textarea
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              className="bg-slate-950/60 border-slate-800/60 text-white min-h-[120px]"
+              value={judgeSystemPrompt}
+              onChange={(e) => setJudgeSystemPrompt(e.target.value)}
+              className="bg-slate-950/60 border border-slate-800 text-white min-h-[100px] resize-none"
               placeholder="Enter judge rubric instructions..."
             />
           </div>
-
-          <div className="pt-4 flex justify-end">
-            <Button
-              onClick={() => runEvaluation()}
-              className="gap-2 bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold px-6 py-2.5 shadow-lg shadow-lime-500/20 cursor-pointer transition-all"
-            >
-              <PlayCircle className="h-5 w-5" /> Start Evaluation Run
-            </Button>
-          </div>
         </CardContent>
       </Card>
+
+      <div className="pt-4 flex justify-end">
+        <Button
+          onClick={() => runEvaluation()}
+          disabled={isPending}
+          className="gap-2 bg-lime-500 hover:bg-lime-400 text-slate-950 font-bold px-8 py-3 shadow-lg shadow-lime-500/20 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isPending ? (
+            <>
+              <RefreshCw className="h-5 w-5 animate-spin" /> Processing...
+            </>
+          ) : (
+            <>
+              <PlayCircle className="h-5 w-5" /> Start Evaluation Run
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

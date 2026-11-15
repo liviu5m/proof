@@ -27,6 +27,8 @@ describe("run API", () => {
       model: "gemini-3.5-flash-lite",
       system_prompt: "You are a judge.",
       judge_model: "gemini-3.5-flash-lite",
+      provider: "google",
+      judge_provider: "google",
     });
 
     expect(mockPost).toHaveBeenCalledWith("/api/runs/", {
@@ -34,6 +36,8 @@ describe("run API", () => {
       model: "gemini-3.5-flash-lite",
       system_prompt: "You are a judge.",
       judge_model: "gemini-3.5-flash-lite",
+      provider: "google",
+      judge_provider: "google",
     });
     expect(res).toEqual({ id: 1 });
   });

@@ -2,7 +2,8 @@ import os
 import sys
 from unittest.mock import AsyncMock, MagicMock
 
-from src.deps import get_llm_client
+from src.deps import get_llm_provider
+from src.llm.base import LLMResponse
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
@@ -25,15 +26,15 @@ def override_get_session():
 
 app.dependency_overrides[get_session] = override_get_session
 
-def override_get_llm_client():
-    mock_client = MagicMock()
-    mock_interaction = MagicMock()
-    mock_interaction.output_text = '{"answer": "test"}'
-    mock_client.aio.interactions.create = AsyncMock(return_value=mock_interaction)
-    return mock_client
+def override_get_llm_provider():
+    mock_provider = MagicMock()
+    async def mock_generate(*args, **kwargs):
+        return LLMResponse(text='{"answer": "test"}')
+    mock_provider.generate = mock_generate
+    return mock_provider
 
 
-app.dependency_overrides[get_llm_client] = override_get_llm_client
+app.dependency_overrides[get_llm_provider] = override_get_llm_provider
 
 @pytest.fixture(scope="session", autouse=True)
 def create_test_tables():

@@ -12,6 +12,8 @@ from src.routes.auth import router as authRouter
 from src.routes.user import router as userRouter
 from src.routes.datasets import router as datasetsRouter
 from src.routes.runs import router as runsRouter
+from src.routes.models import router as modelsRouter 
+from src.routes.provider_credentials import router as providerCredentialsRouter 
 import os
 from src.config import settings
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -62,7 +64,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "connect-src 'self' " + FRONTEND_URL + "; "
+        "connect-src 'self' " + str(settings.FRONTEND_URL) + "; "
         "script-src 'self'; "
         "style-src 'self'; "
         "img-src 'self' data:;"
@@ -107,6 +109,8 @@ app.include_router(authRouter)
 app.include_router(userRouter)
 app.include_router(datasetsRouter)
 app.include_router(runsRouter)
+app.include_router(providerCredentialsRouter)
+app.include_router(modelsRouter)
 
 @app.get("/")
 def root():

@@ -1,12 +1,11 @@
 import asyncio
 import csv
-from google import genai
 from sqlmodel import Session
 import typer
 from .utils import get_file_hash
-from .db import _get_engine 
+from .db import _get_engine
 from sqlmodel import select, Session
-from .deps import get_llm_client
+from .deps import get_llm_provider
 
 from .models import Datasets, Results, Runs
 from .runner import run_tests
@@ -46,6 +45,8 @@ def run(
     model: str = typer.Option("gemini-3.5-flash-lite", "--model", "-m"),
     judge_modal: str = typer.Option("gemini-3.1-flash-lite", "--judge-model", "-jm"),
     user_id: int = typer.Option(None, "--user-id", "-u", help="User ID (default: auto)"),
+    provider: str = typer.Option("google", "--provider", "-pr", help="LLM provider: google, openai, anthropic, ollama"),
+    ollama_base_url: str = typer.Option("http://localhost:11434", "--ollama-base-url", help="Ollama base URL (for ollama provider)"),
 ):
     with Session(_get_engine()) as session:
         hash = get_file_hash(questions)
@@ -61,12 +62,12 @@ def run(
             session.commit()
         else:
             dataset = datasets[0]
-        client = get_llm_client()
+        provider = get_llm_provider(provider, ollama_base_url=ollama_base_url)
         rows = load_dataset(questions)
         dataset.item_count = len(rows)
         session.commit()
-        data = asyncio.run(run_tests(rows, prompt, model, client))
-        scores = asyncio.run(judge_questions(data, judge_modal, client))
+        data = asyncio.run(run_tests(rows, prompt, model, provider))
+        scores = asyncio.run(judge_questions(data, judge_modal, provider))
         avg = 0
         if scores:
             avg = sum(s["score"] for s in scores if s.get("score") is not None) / len(scores)
@@ -75,7 +76,7 @@ def run(
         if dataset.id is None:
             typer.echo("Error: Dataset ID not set", err=True)
             raise typer.Exit(1)
-        run_obj = Runs(dataset_id=dataset.id, model=model, system_prompt=prompt, judge_model=judge_modal, avg_score=avg, total=len(data))
+        run_obj = Runs(dataset_id=dataset.id, model=model, system_prompt=prompt, judge_model=judge_modal, avg_score=avg, total=len(data), provider=provider.provider_name, provider_judge=provider.provider_name)
         session.add(run_obj)
         session.commit()
         session.refresh(run_obj)

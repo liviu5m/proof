@@ -36,6 +36,8 @@ class Runs(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     dataset_id: int = Field(foreign_key="datasets.id", nullable=False)
     model: str = Field(nullable=False)
+    provider: str = Field(default="google", nullable=False)
+    provider_judge: str = Field(default="google", nullable=False)
     system_prompt: str = Field(nullable=False)
     judge_model: str = Field(nullable=False)
     avg_score: Optional[float] = Field(default=None)
@@ -83,3 +85,26 @@ class PasswordResetTokens(SQLModel, table=True):
     expires_at: datetime = Field(nullable=False)
     used: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class ProviderCredential(SQLModel, table=True):
+    __tablename__ = "provider_credentials"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", nullable=False)
+    provider: str = Field(nullable=False)  # "google", "openai", "anthropic", "ollama"
+    encrypted_api_key: str = Field(nullable=False)
+    base_url: Optional[str] = Field(default=None)
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+
+class ModelCatalog(SQLModel, table=True):
+    __tablename__ = "model_catalog"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    provider: str = Field(nullable=False)  # "google", "openai", "anthropic", "ollama"
+    model_id: str = Field(nullable=False)  # "gpt-4o", "claude-3-5-sonnet", etc.
+    name: str = Field(nullable=False)      # Display name
+    supports_json_mode: bool = Field(default=False)
+    supports_system_prompt: bool = Field(default=True)
+    max_tokens: Optional[int] = Field(default=None)
+    cost_per_1k_tokens: Optional[float] = Field(default=None)
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)

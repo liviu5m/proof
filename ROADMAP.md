@@ -189,20 +189,20 @@ _Goal: Stand out to elite engineering teams. These are differentiators, not tabl
 
 _Goal: Remove single-vendor lock-in. Critical for an "enterprise-grade" framework._
 
-- [ ] **LLM provider interface**
+- [x] **LLM provider interface**
   - Define abstract base class `LLMProvider` with `generate(prompt, model, config) -> Response` and `count_tokens(text) -> int`.
   - Implement providers: **Google GenAI**, **OpenAI**, **Anthropic**, **Ollama** (local/self-hosted).
   - Provider selected per run (`provider` field on `Runs`), not hardcoded.
 
-- [ ] **Unified config per provider**
+- [x] **Unified config per provider**
   - `LLMProviderConfig`: API key, base URL, timeout, max retries, default models.
   - Provider credentials stored encrypted at rest; referenced by `provider_id`, not inline keys.
 
-- [ ] **Model catalog**
+- [x] **Model catalog**
   - Admin-curated model list with capabilities (supports JSON mode, supports system prompt, max tokens, cost per 1k tokens).
   - Frontend model dropdown populated from catalog, not hardcoded.
 
-- [ ] **Fallback & routing**
+- [x] **Fallback & routing**
   - Optional fallback chain: if primary provider fails, route to secondary (configurable).
   - Load-balance across multiple API keys for the same provider.
 

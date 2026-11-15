@@ -1,39 +1,9 @@
 import asyncio
 
-from dotenv import load_dotenv
-from google.genai import errors
-from tenacity import (
-    retry,
-    retry_if_exception,
-    stop_after_attempt,
-    wait_exponential,
-)
-
-load_dotenv()
+from src.llm import LLMProvider
 
 MAX_CONCURRENCY = 5
-REQUEST_TIMEOUT = 60  
-RETRYABLE_CODES = {429, 500, 502, 503, 504}
-
-
-class EmptyResponse(Exception):
-    """The API call succeeded but returned no text."""
-
-
-def _is_retryable(exc: BaseException) -> bool:
-    if isinstance(exc, EmptyResponse):
-        return True
-    if isinstance(exc, errors.APIError):
-        return exc.code in RETRYABLE_CODES
-    return isinstance(exc, (asyncio.TimeoutError, TimeoutError))
-
-
-GEMINI_RETRY = retry(
-    wait=wait_exponential(multiplier=1, min=2, max=30),
-    stop=stop_after_attempt(5),
-    retry=retry_if_exception(_is_retryable),
-    reraise=True,
-)
+REQUEST_TIMEOUT = 60
 
 
 def _build_prompt(prompt: str, q: dict) -> str:
@@ -49,47 +19,58 @@ def _build_prompt(prompt: str, q: dict) -> str:
     return full_prompt
 
 
-async def run_single(q, prompt, model, client, sem: asyncio.Semaphore | None = None):
+async def run_single(
+    q, prompt, model, provider: LLMProvider, sem: asyncio.Semaphore | None = None
+):
     full_prompt = _build_prompt(prompt, q)
     print("RUNNING --------------------------------------")
-    @GEMINI_RETRY
+
     async def _call():
-        interaction = await asyncio.wait_for(
-            client.aio.interactions.create(
+        return await asyncio.wait_for(
+            provider.generate(
+                prompt=q["input"],
                 model=model,
                 system_instruction=full_prompt,
-                input=q["input"],
-                generation_config={"thinking_level": "minimal"},
-                store=False,
+                config={"thinking_level": "minimal"},
             ),
             timeout=REQUEST_TIMEOUT,
         )
-        print(interaction.output_text)
-        if not interaction.output_text:
-            print(f"EMPTY RESPONSE for {q['input'][:60]!r}: {interaction}")
-            raise EmptyResponse("no text in output")
-        return interaction
 
     try:
         if sem is not None:
             async with sem:
-                interaction = await _call()
+                response = await _call()
         else:
-            interaction = await _call()
+            response = await _call()
     except Exception as e:
         print(e)
         return {
             "input": q.get("input", ""),
             "response": None,
             "error": f"{type(e).__name__}: {e}",
-            "code": getattr(e, "code", None) or "gemini_api_error",
+            "code": "llm_provider_error",
+        }
+
+    text = response.text or ""
+    if not text:
+        error_msg = (
+            response.raw.get("error", "no text in output")
+            if isinstance(response.raw, dict)
+            else "no text in output"
+        )
+        print(f"EMPTY RESPONSE for {q['input'][:60]!r}: {response}")
+        return {
+            "input": q.get("input", ""),
+            "response": None,
+            "error": error_msg,
+            "code": "empty_response",
         }
 
     print(f"Q: {q['input']}")
-    print(f"A: {interaction.output_text}\n")
+    print(f"A: {text}\n")
     return {
         "input": q["input"],
-        "response": interaction.output_text,
+        "response": text,
         "expected": q.get("expected"),
         "regex": q.get("regex"),
         "min_words": q.get("min_words"),
@@ -100,9 +81,9 @@ async def run_single(q, prompt, model, client, sem: asyncio.Semaphore | None = N
     }
 
 
-async def run_tests(questions, prompt, model, client):
+async def run_tests(questions, prompt, model, provider: LLMProvider):
     sem = asyncio.Semaphore(MAX_CONCURRENCY)
-    tasks = [run_single(q, prompt, model, client, sem) for q in questions]
+    tasks = [run_single(q, prompt, model, provider, sem) for q in questions]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     normalized = []

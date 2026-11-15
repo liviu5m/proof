@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 from unittest.mock import MagicMock, AsyncMock, patch
 from src.main import app
 from src.db import get_session, engine as _engine, _get_engine
-from src.deps import get_llm_client
+from src.deps import get_llm_provider
+from src.llm.base import LLMResponse
 from src.utils import get_current_user, verifyUserTokenSession, createAccessToken
 from src.models import Users, Datasets, Runs
 from sqlmodel import Session, select
@@ -20,18 +21,18 @@ def _mock_current_user():
     return Users(id=1, email="test@example.com", name="Test User", provider="credentials")
 
 
-def _mock_llm_client():
-    mock_client = MagicMock()
-    mock_interaction = MagicMock()
-    mock_interaction.output_text = '{"answer": "Paris"}'
-    mock_client.aio.interactions.create = AsyncMock(return_value=mock_interaction)
-    return mock_client
+def _mock_llm_provider():
+    mock_provider = MagicMock()
+    async def mock_generate(*args, **kwargs):
+        return LLMResponse(text='{"answer": "Paris"}')
+    mock_provider.generate = mock_generate
+    return mock_provider
 
 
 def _apply_overrides():
     app.dependency_overrides[get_current_user] = lambda request=None, session=None: _mock_current_user()
     app.dependency_overrides[verifyUserTokenSession] = lambda request=None: {"id": 1, "email": "test@example.com"}
-    app.dependency_overrides[get_llm_client] = _mock_llm_client
+    app.dependency_overrides[get_llm_provider] = _mock_llm_provider
 
 
 def _clear_overrides():
@@ -307,15 +308,21 @@ class TestRunsSeeded:
 
 # ---- deps.py and db.py coverage ----
 
-class TestDepsGetLLMClient:
-    def test_get_llm_client_returns_client(self):
-        from src.deps import get_llm_client
-        with patch("src.deps.genai.Client") as mock_client_class:
-            mock_instance = MagicMock()
-            mock_client_class.return_value = mock_instance
-            result = get_llm_client()
-            assert result == mock_instance
-            mock_client_class.assert_called_once()
+class TestDepsGetLLMProvider:
+    def test_get_llm_provider_returns_google_provider(self):
+        from src.deps import get_llm_provider
+        from src.llm.providers import GoogleGenAIProvider
+        result = get_llm_provider("google")
+        assert isinstance(result, GoogleGenAIProvider)
+        assert result.provider_name == "google"
+
+    def test_get_llm_provider_unknown_raises(self):
+        from src.deps import get_llm_provider
+        try:
+            get_llm_provider("nonexistent")
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
 
 
 class TestDbFunctions:

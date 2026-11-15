@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     RATE_LIMIT_RUNS_PER_MIN: int = 30
     RATE_LIMIT_DATASETS_PER_MIN: int = 30
+    OPENAI_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
+    OLLAMA_BASE_URL: Optional[str] = "http://localhost:11434" 
+    ENCRYPTION_KEY: Optional[str] = None
 
     class Config:
         env_file = ".env"

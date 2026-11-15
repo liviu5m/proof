@@ -1,24 +1,13 @@
 import asyncio
 import json
+from typing import Any
 
-from dotenv import load_dotenv
-from google.genai import errors
-from tenacity import (
-    retry,
-    retry_if_exception,
-    stop_after_attempt,
-    wait_exponential,
-)
-
+from src.llm import LLMProvider
 from src.scorers import check_json, check_keywords, check_regex, check_word_count
-
-load_dotenv()
 
 MAX_CONCURRENCY = 5
 REQUEST_TIMEOUT = 60  # seconds per attempt
-RETRYABLE_CODES = {429, 500, 502, 503, 504}
 
-# reason comes first so the model states the flaw before committing to a score
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -33,34 +22,48 @@ class BadJudgeOutput(Exception):
     """The API call succeeded but the output was empty or not usable JSON."""
 
 
-def _is_retryable(exc: BaseException) -> bool:
-    if isinstance(exc, BadJudgeOutput):
-        return True
-    if isinstance(exc, errors.APIError):
-        return exc.code in RETRYABLE_CODES
-    return isinstance(exc, (asyncio.TimeoutError, TimeoutError))
-
-
-GEMINI_RETRY = retry(
-    wait=wait_exponential(multiplier=1, min=2, max=30),
-    stop=stop_after_attempt(5),
-    retry=retry_if_exception(_is_retryable),
-    reraise=True,
-)
-
-
 def _parse_judgement(text: str | None) -> dict:
     if not text:
         raise BadJudgeOutput("empty output")
+    # Try direct JSON parse first
     try:
         data = json.loads(text)
         score = float(data["score"])
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
-        raise BadJudgeOutput(f"unparseable output: {text[:200]!r}") from e
-    return {
-        "score": max(1.0, min(5.0, score)),  # clamp to the 1-5 rubric
-        "reason": str(data.get("reason", "")),
-    }
+        return {
+            "score": max(1.0, min(5.0, score)),
+            "reason": str(data.get("reason", "")),
+        }
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        pass
+    # Fallback: try to extract JSON block from within text
+    try:
+        start = text.index("{")
+        end = text.rindex("}") + 1
+        data = json.loads(text[start:end])
+        score = float(data["score"])
+        return {
+            "score": max(1.0, min(5.0, score)),
+            "reason": str(data.get("reason", "")),
+        }
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError, ValueError):
+        pass
+    # Fallback: extract just a score number
+    import re
+    match = re.search(r'"score"\s*:\s*([0-9]+(?:\.[0-9]+)?)', text)
+    if match:
+        score = float(match.group(1))
+        return {
+            "score": max(1.0, min(5.0, score)),
+            "reason": "Extracted from non-JSON judge output",
+        }
+    match = re.search(r"score[:=]\s*([0-9]+(?:\.[0-9]+)?)", text, re.IGNORECASE)
+    if match:
+        score = float(match.group(1))
+        return {
+            "score": max(1.0, min(5.0, score)),
+            "reason": "Extracted from non-JSON judge output",
+        }
+    raise BadJudgeOutput(f"unparseable output: {text[:200]!r}")
 
 
 def _build_judge_prompt(question, response, expected) -> str:
@@ -125,7 +128,9 @@ def _rule_check(q: dict, response: str) -> dict | None:
     return None
 
 
-async def judge_single(q, model, client, sem: asyncio.Semaphore | None = None):
+async def judge_single(
+    q, model, provider: LLMProvider, sem: asyncio.Semaphore | None = None
+):
     if not q.get("response"):
         return {"score": 0.0, "reason": q.get("error") or "no response"}
 
@@ -137,43 +142,56 @@ async def judge_single(q, model, client, sem: asyncio.Semaphore | None = None):
 
     judge_prompt = _build_judge_prompt(q["input"], response, q.get("expected"))
 
-    @GEMINI_RETRY
     async def _call():
-        interaction = await asyncio.wait_for(
-            client.aio.interactions.create(
+        return await asyncio.wait_for(
+            provider.generate(
+                prompt=judge_prompt,
                 model=model,
                 system_instruction=(
-                    "You are a strict evaluator. Answer under 100 characters in plain "
-                    "text only with no markdown or special formatting."
+                    "You are a strict evaluator. Return ONLY valid JSON matching "
+                    'the schema {\"reason\": \"string\", \"score\": number}. '
+                    "No markdown, no extra text, no explanation."
                 ),
-                input=judge_prompt,
                 response_format=SCHEMA,
-                store=False,
             ),
             timeout=REQUEST_TIMEOUT,
         )
-        try:
-            return _parse_judgement(interaction.output_text)
-        except BadJudgeOutput:
-            print(f"BAD JUDGE OUTPUT for {q['input'][:60]!r}: {interaction}")
-            raise
 
     try:
         if sem is not None:
             async with sem:
-                return await _call()
-        return await _call()
+                result = await _call()
+        else:
+            result = await _call()
     except Exception as e:
         return {
             "score": 1.0,
             "reason": f"Judge error ({type(e).__name__}): {e}",
             "judge_failed": True,
         }
+    print("JUDGE ----------------------------------------------")
+    print(result)
+    if result.text is None or result.text == "":
+        return {
+            "score": 1.0,
+            "reason": "Judge returned empty output",
+            "judge_failed": True,
+        }
+
+    try:
+        return _parse_judgement(result.text)
+    except BadJudgeOutput:
+        print(f"BAD JUDGE OUTPUT for {q['input'][:60]!r}: {result.text}")
+        return {
+            "score": 1.0,
+            "reason": f"Judge output unparseable: {result.text[:200]}",
+            "judge_failed": True,
+        }
 
 
-async def judge_questions(data, model, client):
+async def judge_questions(data, model, provider: LLMProvider):
     sem = asyncio.Semaphore(MAX_CONCURRENCY)
-    tasks = [judge_single(q, model, client, sem) for q in data]
+    tasks = [judge_single(q, model, provider, sem) for q in data]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     normalized = []

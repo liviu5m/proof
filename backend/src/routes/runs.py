@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import desc
 from sqlmodel import select
 from src.db import SessionDep, supabase
-from src.deps import get_llm_client
+from src.deps import get_llm_provider
 from src.models import Datasets, ProofUserRole, Runs, Results, Users
 from src.utils import get_current_user, require_member, require_viewer, verifyUserTokenSession, sanitize_text, sanitize_prompt, verify_csrf
 from src.runner import run_tests
@@ -22,12 +22,15 @@ class RunCreateRequest(BaseModel):
     model: str = "gemini-3.5-flash-lite"
     system_prompt: str = "You are a helpful assistant."
     judge_model: str = "gemini-3.5-flash-lite"
+    provider: str = "google"
+    judge_provider: str = "google"
+    ollama_base_url: str | None = None
+    ollama_base_url_judge: str | None = None
 
 @router.post("/")
 async def createRun(
     payload: RunCreateRequest,
     session: SessionDep,
-    client = Depends(get_llm_client),
     user: Users = Depends(get_current_user),
     _: Users = Depends(require_member),
     __: Request = Depends(verify_csrf)
@@ -61,19 +64,31 @@ async def createRun(
     clean_system_prompt = sanitize_prompt(payload.system_prompt)
     clean_judge_model = sanitize_text(payload.judge_model, max_length=100)
     await check_concurrent_run(user.id)
-
+    provider = get_llm_provider(
+        provider=payload.provider,
+        user_id=user.id,
+        session=session,
+        ollama_base_url=payload.ollama_base_url,
+    )
+    provider_judge = get_llm_provider(
+        provider=payload.judge_provider,
+        user_id=user.id,
+        session=session,
+        ollama_base_url=payload.ollama_base_url_judge,
+    )
     try:
 
         rows_as_dicts = [r.model_dump() for r in valid_rows]
-        data = await run_tests(rows_as_dicts, clean_system_prompt, payload.model, client)
-        scores = await judge_questions(data, clean_judge_model, client)
+        data = await run_tests(rows_as_dicts, clean_system_prompt, payload.model, provider)
+        scores = await judge_questions(data, clean_judge_model, provider_judge)
     finally:
         await release_concurrent_run(user.id)
-
     avg_score = sum(s["score"] for s in scores) / len(scores) if scores else 0.0
     run = Runs(
         dataset_id=payload.dataset_id,
         model=payload.model,
+        provider=payload.provider,
+        provider_judge=payload.judge_provider,
         system_prompt=clean_system_prompt,
         judge_model=clean_judge_model,
         avg_score=avg_score,

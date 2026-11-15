@@ -52,6 +52,8 @@ export interface Run {
   id: number;
   dataset_id: number;
   model: string;
+  provider: string;
+  provider_judge: string;
   system_prompt: string;
   judge_model: string;
   avg_score: number | null;
@@ -67,6 +69,18 @@ export interface RunData {
   model: string;
   system_prompt: string;
   judge_model: string;
+  provider: string;
+  judge_provider: string;
+  ollama_base_url?: string;
+  ollama_base_url_judge?: string;
+}
+
+export interface ProviderCredential {
+  id: number;
+  provider: string;
+  base_url: string | null;
+  is_active: boolean;
+  created_at: string;
 }
 
 export interface CompareData {
