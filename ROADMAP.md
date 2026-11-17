@@ -1,8 +1,9 @@
 # Proof — Production Roadmap & Upgrade Plan
 
 **Target rating: 85+/100**  
-**Current harsh rating (Phase 4 NOT yet built): ~44/100**  
-**Gap to close: ~41 points via the phases below.**
+**Current harsh rating (Phases 0, 1, 2, 3, 5 complete; Phase 4 NOT yet built): ~52/100**  
+**Gap to close: ~33 points via the phases below.**  
+> _Baseline updated: Phase 0 (+8 pts) brings ~44 → ~52 per roadmap. Phases 1 (+12), 2 (+8), 3 (+10), and 5 (+8) are complete per your latest work; Phase 4 (+10) is next._
 
 This roadmap is the exact, ordered engineering plan to transform Proof from a prototype into an enterprise-grade, resume-worthy LLM evaluation framework. Every phase below has a **Definition of Done** and **Acceptance Criteria**. Do not start the next phase until the previous phase's Definition of Done is met.
 
