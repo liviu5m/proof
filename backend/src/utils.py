@@ -1,26 +1,28 @@
+import asyncio
 import hashlib
-import os
-import re
 import html
-from dotenv import load_dotenv
-from fastapi import Depends, HTTPException, Request, UploadFile, status, WebSocket
-from passlib.context import CryptContext
-import bcrypt
+import os
 import random
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+import re
+import secrets
+from datetime import datetime, timedelta
+
+import bcrypt
 import jwt
+import pyclamd
+from dotenv import load_dotenv
+from fastapi import Depends, HTTPException, Request, UploadFile, status
+from passlib.context import CryptContext
 from sqlmodel import select
+
+from src.config import settings
 from src.db import SessionDep
 from src.models import ProofUserRole, Users
-import pyclamd
-import asyncio
-import secrets
-from src.config import settings
 
 load_dotenv(verbose=True)
 SECRET_KEY = os.getenv("SECRET_KEY", "")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 def get_file_hash(filepath: str) -> str:
     sha256 = hashlib.sha256()
@@ -29,8 +31,10 @@ def get_file_hash(filepath: str) -> str:
             sha256.update(chunk)
     return sha256.hexdigest()
 
+
 def hashPassword(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
 
 def verifyPassword(plainPassword, hashedPassword) -> bool:
     return bcrypt.checkpw(plainPassword.encode("utf-8"), hashedPassword.encode("utf-8"))
@@ -66,7 +70,7 @@ def createAccessToken(data: dict) -> str:
     return encoded_jwt
 
 
-def decodeToken(token: str) -> Optional[dict]:
+def decodeToken(token: str) -> dict | None:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
@@ -74,7 +78,7 @@ def decodeToken(token: str) -> Optional[dict]:
         return None
 
 
-def getUserIdFromToken(token: str) -> Optional[int]:
+def getUserIdFromToken(token: str) -> int | None:
     payload = decodeToken(token)
     if payload:
         return payload.get("id")
@@ -90,24 +94,33 @@ async def verifyUserTokenSession(request: Request):
 
     return user
 
+
 async def get_current_user(request: Request, session: SessionDep):
     jwtToken = request.cookies.get("jwt")
     if not jwtToken:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated"
+        )
 
     payload = decodeToken(jwtToken)
     if not payload:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token"
+        )
 
     user_id = payload.get("id")
     if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
 
     stmt = select(Users).where(Users.id == user_id)
     userDb = session.exec(stmt).first()
 
     if not userDb:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+        )
 
     return userDb
 
@@ -169,13 +182,16 @@ async def scan_file(file: UploadFile):
         await file.seek(0)
 
         scan_result = await loop.run_in_executor(None, cd.scan_stream, content)
-        if scan_result and scan_result.get('stream'):
-            status = scan_result['stream'][0]
-            if status == 'FOUND':
-                virus_name = scan_result['stream'][1]
+        if scan_result and scan_result.get("stream"):
+            status = scan_result["stream"][0]
+            if status == "FOUND":
+                virus_name = scan_result["stream"][1]
                 raise HTTPException(
                     status_code=400,
-                    detail={"error": f"Malicious file detected: {virus_name}", "code": "virus_detected"}
+                    detail={
+                        "error": f"Malicious file detected: {virus_name}",
+                        "code": "virus_detected",
+                    },
                 )
     except ConnectionError:
         pass
@@ -186,6 +202,7 @@ async def scan_file(file: UploadFile):
 async def get_current_active_user(current_user: Users = Depends(get_current_user)):
     return current_user
 
+
 def transformRole(role: ProofUserRole):
     if role == ProofUserRole.VIEWER:
         return 1
@@ -194,18 +211,21 @@ def transformRole(role: ProofUserRole):
     elif role == ProofUserRole.ADMIN:
         return 3
 
+
 def require_role(required_role: ProofUserRole):
     """Dependency that requires a specific role or higher."""
+
     def role_checker(current_user: Users = Depends(get_current_user)):
         if current_user.role == ProofUserRole.ADMIN:
             return current_user
-        
+
         if transformRole(current_user.role) < transformRole(required_role):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Requires {required_role.value} role",
             )
         return current_user
+
     return role_checker
 
 

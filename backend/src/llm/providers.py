@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 import asyncio
 from typing import Any
+
 import httpx
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
-from .base import LLMProvider, LLMResponse, LLMProviderConfig
+from .base import LLMProvider, LLMProviderConfig, LLMResponse
 
 try:
     from google import genai
@@ -25,6 +27,7 @@ except ImportError:
 
 RETRYABLE_CODES = {429, 500, 502, 503, 504}
 
+
 def _is_retryable_genai(exc):
     if genai_errors is not None and isinstance(exc, genai_errors.APIError):
         return exc.code in RETRYABLE_CODES
@@ -40,8 +43,9 @@ class GoogleGenAIProvider(LLMProvider):
             raise ImportError("google-genai required")
         self._client = genai.Client(api_key=config.api_key)
 
-    async def generate(self, prompt, model, system_instruction=None,
-                       response_format=None, config=None) -> LLMResponse:
+    async def generate(
+        self, prompt, model, system_instruction=None, response_format=None, config=None
+    ) -> LLMResponse:
         gen_config: dict[str, Any] = {}
         if response_format:
             gen_config["response_mime_type"] = "application/json"
@@ -49,15 +53,23 @@ class GoogleGenAIProvider(LLMProvider):
         if config:
             gen_config.update(config)
 
-        @retry(wait=wait_exponential(multiplier=1, min=2, max=30),
-               stop=stop_after_attempt(self.config.max_retries),
-               retry=retry_if_exception(_is_retryable_genai), reraise=True)
+        @retry(
+            wait=wait_exponential(multiplier=1, min=2, max=30),
+            stop=stop_after_attempt(self.config.max_retries),
+            retry=retry_if_exception(_is_retryable_genai),
+            reraise=True,
+        )
         async def _call():
             return await asyncio.wait_for(
                 self._client.aio.interactions.create(
-                    model=model, system_instruction=system_instruction,
-                    input=prompt, generation_config=gen_config, store=False),
-                timeout=self.config.timeout)
+                    model=model,
+                    system_instruction=system_instruction,
+                    input=prompt,
+                    generation_config=gen_config,
+                    store=False,
+                ),
+                timeout=self.config.timeout,
+            )
 
         try:
             interaction = await _call()
@@ -77,13 +89,16 @@ class OpenAIProvider(LLMProvider):
         super().__init__(config)
         if AsyncOpenAI is None:
             raise ImportError("openai required")
-        self._client = AsyncOpenAI(api_key=config.api_key,
-                                   base_url=config.base_url,
-                                   timeout=config.timeout,
-                                   max_retries=config.max_retries)
+        self._client = AsyncOpenAI(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            timeout=config.timeout,
+            max_retries=config.max_retries,
+        )
 
-    async def generate(self, prompt, model, system_instruction=None,
-                       response_format=None, config=None) -> LLMResponse:
+    async def generate(
+        self, prompt, model, system_instruction=None, response_format=None, config=None
+    ) -> LLMResponse:
         messages = []
         if system_instruction:
             messages.append({"role": "system", "content": system_instruction})
@@ -103,7 +118,8 @@ class OpenAIProvider(LLMProvider):
             text=text,
             input_tokens=getattr(usage, "prompt_tokens", None) if usage else None,
             output_tokens=getattr(usage, "completion_tokens", None) if usage else None,
-            raw=response)
+            raw=response,
+        )
 
     def count_tokens(self, text: str) -> int:
         return max(1, len(text) // 4)
@@ -116,15 +132,21 @@ class AnthropicProvider(LLMProvider):
         super().__init__(config)
         if AsyncAnthropic is None:
             raise ImportError("anthropic required")
-        self._client = AsyncAnthropic(api_key=config.api_key,
-                                      base_url=config.base_url,
-                                      timeout=config.timeout,
-                                      max_retries=config.max_retries)
+        self._client = AsyncAnthropic(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            timeout=config.timeout,
+            max_retries=config.max_retries,
+        )
 
-    async def generate(self, prompt, model, system_instruction=None,
-                       response_format=None, config=None) -> LLMResponse:
-        kwargs = {"model": model, "max_tokens": 4096,
-                  "messages": [{"role": "user", "content": prompt}]}
+    async def generate(
+        self, prompt, model, system_instruction=None, response_format=None, config=None
+    ) -> LLMResponse:
+        kwargs = {
+            "model": model,
+            "max_tokens": 4096,
+            "messages": [{"role": "user", "content": prompt}],
+        }
         if system_instruction:
             kwargs["system"] = system_instruction
         if config:
@@ -139,7 +161,8 @@ class AnthropicProvider(LLMProvider):
             text=text,
             input_tokens=getattr(usage, "input_tokens", None) if usage else None,
             output_tokens=getattr(usage, "output_tokens", None) if usage else None,
-            raw=response)
+            raw=response,
+        )
 
     def count_tokens(self, text: str) -> int:
         return max(1, len(text) // 4)
@@ -152,8 +175,9 @@ class OllamaProvider(LLMProvider):
         super().__init__(config)
         self._base_url = (config.base_url or "http://localhost:11434").rstrip("/")
 
-    async def generate(self, prompt, model, system_instruction=None,
-                       response_format=None, config=None) -> LLMResponse:
+    async def generate(
+        self, prompt, model, system_instruction=None, response_format=None, config=None
+    ) -> LLMResponse:
         payload = {"model": model, "prompt": prompt, "stream": False}
         if system_instruction:
             payload["system"] = system_instruction
@@ -172,7 +196,8 @@ class OllamaProvider(LLMProvider):
             text=data.get("response", "") or "",
             input_tokens=data.get("prompt_eval_count"),
             output_tokens=data.get("eval_count"),
-            raw=data)
+            raw=data,
+        )
 
     def count_tokens(self, text: str) -> int:
         return max(1, len(text) // 4)

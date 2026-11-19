@@ -1,7 +1,9 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+
+from src.judge import judge_questions, judge_single
 from src.runner import run_single, run_tests
-from src.judge import judge_single, judge_questions
 
 
 def _make_mock_client(output_text='{"answer": "Paris"}'):
@@ -24,7 +26,9 @@ class TestRunSingle:
             "max_words": 10,
             "required_keywords": "Paris",
         }
-        res = await run_single(q, "You are helpful.", "gemini-3.5-flash-lite", mock_client)
+        res = await run_single(
+            q, "You are helpful.", "gemini-3.5-flash-lite", mock_client
+        )
         assert res["input"] == q["input"]
         assert res["response"] == '{"answer": "Paris"}'
         assert res["expected"] == "Paris"
@@ -32,7 +36,7 @@ class TestRunSingle:
 
     @pytest.mark.asyncio
     async def test_run_single_injects_word_count_into_prompt(self):
-        mock_client = _make_mock_client('ok')
+        mock_client = _make_mock_client("ok")
         q = {
             "input": "Say hi",
             "expected": "hi",
@@ -46,7 +50,7 @@ class TestRunSingle:
 
     @pytest.mark.asyncio
     async def test_run_single_injects_keywords_into_prompt(self):
-        mock_client = _make_mock_client('ok')
+        mock_client = _make_mock_client("ok")
         q = {
             "input": "Say hi",
             "expected": "hi",
@@ -61,7 +65,7 @@ class TestRunSingle:
 
     @pytest.mark.asyncio
     async def test_run_single_injects_regex_into_prompt(self):
-        mock_client = _make_mock_client('ok')
+        mock_client = _make_mock_client("ok")
         q = {
             "input": "Say hi",
             "expected": "hi",
@@ -75,11 +79,11 @@ class TestRunSingle:
     @pytest.mark.asyncio
     async def test_run_single_api_error_returns_error_dict(self):
         mock_client = MagicMock()
-        mock_client.generate = AsyncMock(
-            side_effect=Exception("API rate limited")
-        )
+        mock_client.generate = AsyncMock(side_effect=Exception("API rate limited"))
         q = {"input": "What is 2+2?", "expected": "4"}
-        res = await run_single(q, "System prompt.", "gemini-3.5-flash-lite", mock_client)
+        res = await run_single(
+            q, "System prompt.", "gemini-3.5-flash-lite", mock_client
+        )
         assert res["input"] == "What is 2+2?"
         assert res["response"] is None
         assert "error" in res
@@ -89,6 +93,7 @@ class TestRunSingle:
     async def test_run_single_retry_on_429(self):
         """429 errors are retried (note: retry config in runner.py has a pre-existing bug;
         this test documents current behavior where non-retriable 429 returns error dict)."""
+
         class RateLimitError(Exception):
             status_code = 429
 
@@ -97,7 +102,9 @@ class TestRunSingle:
             side_effect=RateLimitError("429 Too Many Requests")
         )
         q = {"input": "What is 2+2?", "expected": "4"}
-        res = await run_single(q, "System prompt.", "gemini-3.5-flash-lite", mock_client)
+        res = await run_single(
+            q, "System prompt.", "gemini-3.5-flash-lite", mock_client
+        )
         assert res["response"] is None
         assert "error" in res
         assert mock_client.generate.call_count == 1
@@ -105,24 +112,23 @@ class TestRunSingle:
     @pytest.mark.asyncio
     async def test_run_single_fail_fast_on_400(self):
         mock_client = MagicMock()
-        mock_client.generate = AsyncMock(
-            side_effect=Exception("400 Bad Request")
-        )
+        mock_client.generate = AsyncMock(side_effect=Exception("400 Bad Request"))
         q = {"input": "What is 2+2?", "expected": "4"}
-        res = await run_single(q, "System prompt.", "gemini-3.5-flash-lite", mock_client)
+        res = await run_single(
+            q, "System prompt.", "gemini-3.5-flash-lite", mock_client
+        )
         assert res["response"] is None
         assert "error" in res
         assert mock_client.generate.call_count == 1
 
     @pytest.mark.asyncio
     async def test_run_single_timeout_handling(self):
-        import asyncio
         mock_client = MagicMock()
-        mock_client.generate = AsyncMock(
-            side_effect=asyncio.TimeoutError("Request timed out")
-        )
+        mock_client.generate = AsyncMock(side_effect=TimeoutError("Request timed out"))
         q = {"input": "What is 2+2?", "expected": "4"}
-        res = await run_single(q, "System prompt.", "gemini-3.5-flash-lite", mock_client)
+        res = await run_single(
+            q, "System prompt.", "gemini-3.5-flash-lite", mock_client
+        )
         assert res["response"] is None
         assert "error" in res
 
@@ -135,7 +141,9 @@ class TestRunTests:
             {"input": "Q1", "expected": "A1"},
             {"input": "Q2", "expected": "A2"},
         ]
-        results = await run_tests(questions, "System prompt.", "gemini-3.5-flash-lite", mock_client)
+        results = await run_tests(
+            questions, "System prompt.", "gemini-3.5-flash-lite", mock_client
+        )
         assert len(results) == 2
         assert results[0]["input"] == "Q1"
         assert results[1]["input"] == "Q2"
@@ -146,14 +154,14 @@ class TestRunTests:
         mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.text = '{"answer": "ok"}'
-        mock_client.generate = AsyncMock(
-            side_effect=[Exception("boom"), mock_response]
-        )
+        mock_client.generate = AsyncMock(side_effect=[Exception("boom"), mock_response])
         questions = [
             {"input": "Q1", "expected": "A1"},
             {"input": "Q2", "expected": "A2"},
         ]
-        results = await run_tests(questions, "System prompt.", "gemini-3.5-flash-lite", mock_client)
+        results = await run_tests(
+            questions, "System prompt.", "gemini-3.5-flash-lite", mock_client
+        )
         assert len(results) == 2
         assert "error" in results[0]
         assert results[0]["response"] is None
@@ -274,9 +282,7 @@ class TestJudgeSingle:
     @pytest.mark.asyncio
     async def test_judge_single_api_error_returns_score_one(self):
         mock_client = MagicMock()
-        mock_client.generate = AsyncMock(
-            side_effect=Exception("API down")
-        )
+        mock_client.generate = AsyncMock(side_effect=Exception("API down"))
         q = {
             "input": "What is 2+2?",
             "response": "4",

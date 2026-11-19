@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+
+import httpx
+from fastapi import APIRouter, Depends, status
 from sqlmodel import select
+
 from src.db import SessionDep
-from src.models import ModelCatalog, Users, ProviderCredential
+from src.models import ModelCatalog, ProviderCredential, Users
 from src.security import decrypt_api_key
 from src.utils import get_current_user
-import httpx
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ async def list_models(
     user: Users = Depends(get_current_user),
 ):
     """List all active models from the catalog."""
-    stmt = select(ModelCatalog).where(ModelCatalog.is_active == True)
+    stmt = select(ModelCatalog).where(ModelCatalog.is_active)
     models = session.exec(stmt).all()
     return [
         {
@@ -56,7 +58,7 @@ async def sync_models(
             select(ProviderCredential).where(
                 ProviderCredential.user_id == user.id,
                 ProviderCredential.provider == provider,
-                ProviderCredential.is_active == True,
+                ProviderCredential.is_active,
             )
         ).first()
         api_key = decrypt_api_key(cred.encrypted_api_key) if cred else None
@@ -100,8 +102,7 @@ async def sync_models(
             if provider == "openai":
                 raw_models = data.get("data", [])
                 provider_models = [
-                    {"id": m.get("id", ""), "name": m.get("id", "")}
-                    for m in raw_models
+                    {"id": m.get("id", ""), "name": m.get("id", "")} for m in raw_models
                 ]
             elif provider == "anthropic":
                 raw_models = data.get("data", [])
@@ -114,7 +115,8 @@ async def sync_models(
                 provider_models = [
                     {
                         "id": m.get("name", "").replace("models/", ""),
-                        "name": m.get("display_name") or m.get("name", "").replace("models/", ""),
+                        "name": m.get("display_name")
+                        or m.get("name", "").replace("models/", ""),
                     }
                     for m in raw_models
                 ]

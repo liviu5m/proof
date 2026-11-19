@@ -1,21 +1,28 @@
 import os
-from sqlmodel import create_engine, SQLModel, Session, text
+from typing import Annotated
+
 from dotenv import load_dotenv
-from typing import Annotated, Optional
 from fastapi import Depends
-from supabase import create_client, Client
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from sqlalchemy.exc import OperationalError
+from sqlmodel import Session, SQLModel, create_engine, text
+from supabase import Client, create_client
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "") 
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
 _engine = None
-_supabase: Optional[Client] = None
+_supabase: Client | None = None
+
 
 @retry(
     stop=stop_after_attempt(3),
@@ -28,12 +35,9 @@ def _get_engine():
     if _engine is None:
         if not DATABASE_URL:
             raise ValueError("DATABASE_URL not set")
-        
-        engine_kwargs = {
-            "echo": True,
-            "pool_pre_ping": True
-        }
-        
+
+        engine_kwargs = {"echo": True, "pool_pre_ping": True}
+
         if DATABASE_URL.startswith("sqlite"):
             engine_kwargs["connect_args"] = {}
         else:
@@ -43,9 +47,10 @@ def _get_engine():
             }
             engine_kwargs["pool_size"] = 5
             engine_kwargs["max_overflow"] = 10
-        
+
         _engine = create_engine(DATABASE_URL, **engine_kwargs)
     return _engine
+
 
 def _get_supabase() -> Client:
     global _supabase
@@ -57,6 +62,7 @@ def _get_supabase() -> Client:
 class _Lazy:
     def __init__(self, getter):
         self._getter = getter
+
     def __getattr__(self, name):
         return getattr(self._getter(), name)
 
@@ -64,10 +70,12 @@ class _Lazy:
 engine = _Lazy(_get_engine)
 supabase = _Lazy(_get_supabase)
 
+
 def init_db():
     eng = _get_engine()
     SQLModel.metadata.create_all(eng)
     print("✅ Database tables created successfully!")
+
 
 def check_db_connection() -> bool:
     try:
@@ -76,6 +84,7 @@ def check_db_connection() -> bool:
         return True
     except Exception:
         return False
+
 
 def get_session():
     with Session(_get_engine()) as session:

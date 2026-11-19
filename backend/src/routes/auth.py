@@ -1,18 +1,24 @@
-from datetime import datetime, timedelta, timezone
+import os
+from datetime import UTC, datetime, timedelta
 
+import requests
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
-from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlmodel import select
+
 from src.db import SessionDep
-from src.models import EmailVerifications, PasswordResetTokens, RefreshTokens, Users
-import jwt
-import os
-from src.utils import create_token, createAccessToken, hash_token, hashPassword, verifyPassword, verify_csrf
-import requests
 from src.mailer import send_email_verification, send_password_reset_email
+from src.models import EmailVerifications, PasswordResetTokens, RefreshTokens, Users
+from src.utils import (
+    create_token,
+    createAccessToken,
+    hash_token,
+    hashPassword,
+    verify_csrf,
+    verifyPassword,
+)
 
 router = APIRouter(prefix="/api/auth")
 load_dotenv()
@@ -22,9 +28,11 @@ FRONTEND_URL = os.getenv("FRONTEND_URL")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
+
 class LoginData(BaseModel):
     email: str
     password: str
+
 
 @router.post("/login")
 async def login(data: LoginData, session: SessionDep, response: Response):
@@ -68,7 +76,7 @@ async def login(data: LoginData, session: SessionDep, response: Response):
         refresh_token_row = RefreshTokens(
             user_id=user.id,
             token_hash=hash_token(refresh_plain),
-            expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+            expires_at=datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
             revoked=False,
         )
         session.add(refresh_token_row)
@@ -97,7 +105,10 @@ async def login(data: LoginData, session: SessionDep, response: Response):
         raise
     except Exception as e:
         print(f"LOGIN ERROR: {type(e).__name__}: {e}")
-        raise HTTPException(status_code=500, detail="Login failed. Please try again.")
+        raise HTTPException(
+            status_code=500, detail="Login failed. Please try again."
+        ) from None
+
 
 class RegisterData(BaseModel):
     name: str
@@ -105,8 +116,11 @@ class RegisterData(BaseModel):
     password: str
     passwordConfirmation: str
 
+
 @router.post("/register")
-async def register(data: RegisterData, session: SessionDep, _: Request = Depends(verify_csrf)):
+async def register(
+    data: RegisterData, session: SessionDep, _: Request = Depends(verify_csrf)
+):
     stmt = select(Users).where(Users.email == data.email)
     user = session.exec(stmt).first()
     if data.password != data.passwordConfirmation:
@@ -122,7 +136,11 @@ async def register(data: RegisterData, session: SessionDep, _: Request = Depends
     session.commit()
     session.refresh(user)
     token = create_token()
-    email_verification= EmailVerifications(user_id=user.id, token_hash=hash_token(token), expires_at=datetime.now(timezone.utc)+timedelta(minutes=5))
+    email_verification = EmailVerifications(
+        user_id=user.id,
+        token_hash=hash_token(token),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
     session.add(email_verification)
     session.commit()
     try:
@@ -130,6 +148,7 @@ async def register(data: RegisterData, session: SessionDep, _: Request = Depends
     except Exception as e:
         print(f"Email send failed: {e}")
     return {"message": "User registered successfully"}
+
 
 class ResendData(BaseModel):
     email: str
@@ -143,8 +162,11 @@ class ConfirmResetData(BaseModel):
     token: str
     new_password: str
 
+
 @router.post("/resend-verification")
-async def resend(data: ResendData, session: SessionDep, _: Request = Depends(verify_csrf)):
+async def resend(
+    data: ResendData, session: SessionDep, _: Request = Depends(verify_csrf)
+):
     stmt = select(Users).where(Users.email == data.email)
     user = session.exec(stmt).first()
     if not user:
@@ -152,7 +174,11 @@ async def resend(data: ResendData, session: SessionDep, _: Request = Depends(ver
     if user.verified:
         raise HTTPException(status_code=400, detail="Email already verified")
     token = create_token()
-    email_verification= EmailVerifications(user_id=user.id, token_hash=hash_token(token), expires_at=datetime.now(timezone.utc)+timedelta(minutes=5))
+    email_verification = EmailVerifications(
+        user_id=user.id,
+        token_hash=hash_token(token),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
     session.add(email_verification)
     session.commit()
 
@@ -164,7 +190,9 @@ async def resend(data: ResendData, session: SessionDep, _: Request = Depends(ver
 
 
 @router.post("/password-reset/request")
-async def request_password_reset(data: PasswordResetRequest, session: SessionDep, _: Request = Depends(verify_csrf)):
+async def request_password_reset(
+    data: PasswordResetRequest, session: SessionDep, _: Request = Depends(verify_csrf)
+):
     stmt = select(Users).where(Users.email == data.email)
     user = session.exec(stmt).first()
     if not user:
@@ -174,7 +202,7 @@ async def request_password_reset(data: PasswordResetRequest, session: SessionDep
     reset_token = PasswordResetTokens(
         user_id=user.id,
         token_hash=hash_token(token),
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+        expires_at=datetime.now(UTC) + timedelta(minutes=30),
     )
     session.add(reset_token)
     session.commit()
@@ -188,7 +216,9 @@ async def request_password_reset(data: PasswordResetRequest, session: SessionDep
 
 
 @router.post("/password-reset/confirm")
-async def confirm_password_reset(data: ConfirmResetData, session: SessionDep, _: Request = Depends(verify_csrf)):
+async def confirm_password_reset(
+    data: ConfirmResetData, session: SessionDep, _: Request = Depends(verify_csrf)
+):
     token_hash = hash_token(data.token)
     stmt = select(PasswordResetTokens).where(
         PasswordResetTokens.token_hash == token_hash
@@ -197,7 +227,7 @@ async def confirm_password_reset(data: ConfirmResetData, session: SessionDep, _:
 
     if not reset_token:
         raise HTTPException(status_code=400, detail="Invalid or expired token")
-    if reset_token.expires_at < datetime.now(timezone.utc):
+    if reset_token.expires_at < datetime.now(UTC):
         raise HTTPException(status_code=400, detail="Token expired")
     if reset_token.used:
         raise HTTPException(status_code=400, detail="Token already used")
@@ -214,6 +244,7 @@ async def confirm_password_reset(data: ConfirmResetData, session: SessionDep, _:
 
     return {"message": "Password reset successfully"}
 
+
 @router.get("/google")
 async def google(response: Response):
     google_auth_url = (
@@ -225,6 +256,7 @@ async def google(response: Response):
     )
     return RedirectResponse(url=google_auth_url)
 
+
 @router.get("/google/callback")
 def google_callback(code: str, session: SessionDep, response: Response):
     token_url = "https://oauth2.googleapis.com/token"
@@ -235,30 +267,36 @@ def google_callback(code: str, session: SessionDep, response: Response):
         "redirect_uri": REDIRECT_URI,
         "grant_type": "authorization_code",
     }
-    
+
     token_res = requests.post(token_url, data=token_data)
     if token_res.status_code != 200:
-        raise HTTPException(status_code=400, detail="Failed to fetch tokens from Google")
-    
+        raise HTTPException(
+            status_code=400, detail="Failed to fetch tokens from Google"
+        )
+
     tokens = token_res.json()
     access_token = tokens.get("access_token")
 
     user_info_url = "https://www.googleapis.com/oauth2/v3/userinfo"
-    user_res = requests.get(user_info_url, headers={"Authorization": f"Bearer {access_token}"})
+    user_res = requests.get(
+        user_info_url, headers={"Authorization": f"Bearer {access_token}"}
+    )
     if user_res.status_code != 200:
         raise HTTPException(status_code=400, detail="Failed to fetch user info")
-    
+
     user_info = user_res.json()
     email = user_info.get("email")
     name = user_info.get("name")
-    google_id = user_info.get("sub")
-    
-    userStmt = select(Users).where(Users.email == email);
+    user_info.get("sub")
+
+    userStmt = select(Users).where(Users.email == email)
     user = session.exec(userStmt).first()
-    userFinal = None 
+    userFinal = None
 
     if user and user.provider != "google":
-        return RedirectResponse(url=f"{FRONTEND_URL}/auth/login?error=This%20users%20can't%20be%20signed%20in%20with%20Google")
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/auth/login?error=This%20users%20can't%20be%20signed%20in%20with%20Google"
+        )
     elif user:
         userFinal = user
     else:
@@ -266,7 +304,6 @@ def google_callback(code: str, session: SessionDep, response: Response):
         session.add(userFinal)
         session.commit()
         session.refresh(userFinal)
-    
 
     jwt = createAccessToken(
         data={
@@ -280,7 +317,7 @@ def google_callback(code: str, session: SessionDep, response: Response):
     refresh_token_row = RefreshTokens(
         user_id=userFinal.id,
         token_hash=hash_token(refresh_plain),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_at=datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
         revoked=False,
     )
     session.add(refresh_token_row)
@@ -306,12 +343,13 @@ def google_callback(code: str, session: SessionDep, response: Response):
         path="/",
     )
     return response
-    
+
+
 @router.post("/logout")
 def logout(request: Request, response: Response, session: SessionDep):
     refresh_token = request.cookies.get("refresh_token")
     if refresh_token:
-        token_hash = hash_refresh_token(refresh_token)
+        token_hash = hash_token(refresh_token)
         stmt = select(RefreshTokens).where(RefreshTokens.token_hash == token_hash)
         rt = session.exec(stmt).first()
         if rt:
@@ -324,6 +362,7 @@ def logout(request: Request, response: Response, session: SessionDep):
         key="refresh_token", path="/api/auth/refresh", secure=True, samesite="none"
     )
     return {"message": "Logged out successfully"}
+
 
 @router.post("/refresh")
 async def getRefreshToken(request: Request, response: Response, session: SessionDep):
@@ -349,7 +388,7 @@ async def getRefreshToken(request: Request, response: Response, session: Session
         )
 
     # Check expiry
-    if rt.expires_at < datetime.now(timezone.utc):
+    if rt.expires_at < datetime.now(UTC):
         rt.revoked = True
         session.add(rt)
         session.commit()
@@ -382,7 +421,7 @@ async def getRefreshToken(request: Request, response: Response, session: Session
     new_rt = RefreshTokens(
         user_id=user.id,
         token_hash=new_hash,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_at=datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
         revoked=False,
     )
     session.add(new_rt)
@@ -418,6 +457,7 @@ async def getRefreshToken(request: Request, response: Response, session: Session
 
     return {"message": "Tokens refreshed"}
 
+
 @router.post("/email-verification")
 async def verify_email(data: dict, session: SessionDep):
     token = data.get("token")
@@ -430,7 +470,7 @@ async def verify_email(data: dict, session: SessionDep):
 
     if not ev or ev.used:
         raise HTTPException(status_code=400, detail="Invalid or used token")
-    if ev.expires_at < datetime.now(timezone.utc):
+    if ev.expires_at < datetime.now(UTC):
         raise HTTPException(status_code=400, detail="Token expired")
 
     user = session.get(Users, ev.user_id)

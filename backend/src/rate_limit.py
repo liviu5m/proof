@@ -1,17 +1,17 @@
 import asyncio
-from collections import defaultdict, deque
 import time
+from collections import defaultdict, deque
 
-from fastapi import HTTPException, Request, status, Depends
+from fastapi import Depends, HTTPException, Request, status
 from redis.asyncio import Redis
+
 from src.config import settings
-from src.models import Users
 from src.utils import get_current_user
-from typing import Deque, Dict, Optional, Tuple
 
-_redis: Optional[Redis] = None
+_redis: Redis | None = None
 
-def _get_redis() -> Optional[Redis]:
+
+def _get_redis() -> Redis | None:
     global _redis
     if _redis is None:
         try:
@@ -20,18 +20,20 @@ def _get_redis() -> Optional[Redis]:
             _redis = None
     return _redis
 
-_request_logs: Dict[str, Deque[float]] = defaultdict(deque)
-_active_runs: Dict[int, int] = defaultdict(int)
+
+_request_logs: dict[str, deque[float]] = defaultdict(deque)
+_active_runs: dict[int, int] = defaultdict(int)
 _lock = asyncio.Lock()
+
 
 class _SlidingWindow:
     def __init__(self, limit: int, window_seconds: int):
-        self.limit = limit          
-        self.window = window_seconds 
+        self.limit = limit
+        self.window = window_seconds
 
-    async def check(self, key: str) -> Tuple[bool, Optional[int]]:
+    async def check(self, key: str) -> tuple[bool, int | None]:
         r = _get_redis()
-        now = time.time()
+        time.time()
         if r is not None:
             try:
                 pipe = r.pipeline()
@@ -51,20 +53,24 @@ class _SlidingWindow:
             except Exception:
                 pass
 
+
 _limiter_runs = _SlidingWindow(settings.RATE_LIMIT_RUNS_PER_MIN, 60)
 _limiter_datasets = _SlidingWindow(settings.RATE_LIMIT_DATASETS_PER_MIN, 60)
+
 
 def _client_ip(request: Request) -> str:
     client = request.client
     return client.host if client and client.host else "unknown"
 
-async def _raise_rate_limited(retry_after: Optional[int], message: str) -> None:
+
+async def _raise_rate_limited(retry_after: int | None, message: str) -> None:
     headers = {"Retry-After": str(retry_after)} if retry_after else None
     raise HTTPException(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         detail={"error": message, "code": "rate_limited", "retry_after": retry_after},
         headers=headers,
     )
+
 
 async def rate_limit_runs(request: Request, user=Depends(get_current_user)) -> None:
     key = f"user:{user.id}" if user else f"ip:{_client_ip(request)}"
@@ -78,6 +84,7 @@ async def rate_limit_datasets(request: Request, user=Depends(get_current_user)) 
     allowed, retry_after = await _limiter_runs.check(f"rate_limit:datasets:{key}")
     if not allowed:
         await _raise_rate_limited(retry_after, "Too many requests to /api/datasets")
+
 
 async def check_concurrent_run(user_id: int) -> None:
     r = _get_redis()

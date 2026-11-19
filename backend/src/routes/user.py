@@ -1,11 +1,14 @@
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from src.db import SessionDep
 from src.models import ProofUserRole, Users
-from src.utils import decodeToken, verifyUserTokenSession, require_admin, require_member, get_current_user
-
+from src.utils import (
+    decodeToken,
+    get_current_user,
+    require_admin,
+    verifyUserTokenSession,
+)
 
 router = APIRouter(prefix="/api/user", dependencies=[Depends(verifyUserTokenSession)])
 

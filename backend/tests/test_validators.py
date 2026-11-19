@@ -1,12 +1,10 @@
 import pytest
 from pydantic import ValidationError
+
 from src.validators import (
     DatasetRow,
     validate_csv_headers,
     validate_csv_rows,
-    REQUIRED_COLUMNS,
-    OPTIONAL_COLUMNS,
-    ALL_COLUMNS,
 )
 
 
@@ -104,8 +102,16 @@ class TestValidateCsvHeaders:
         assert errors == []
 
     def test_valid_headers_all_columns(self):
-        headers = ["input", "expected", "regex", "min_words", "max_words",
-                   "required_keywords", "forbidden_keywords", "requires_json"]
+        headers = [
+            "input",
+            "expected",
+            "regex",
+            "min_words",
+            "max_words",
+            "required_keywords",
+            "forbidden_keywords",
+            "requires_json",
+        ]
         errors = validate_csv_headers(headers)
         assert errors == []
 
@@ -135,7 +141,12 @@ class TestValidateCsvRows:
     def test_valid_rows(self):
         rows = [
             {"input": "What is 2+2?", "expected": "4"},
-            {"input": "Capital of France?", "expected": "Paris", "min_words": "1", "max_words": "5"},
+            {
+                "input": "Capital of France?",
+                "expected": "Paris",
+                "min_words": "1",
+                "max_words": "5",
+            },
         ]
         valid, errors = validate_csv_rows(rows)
         assert len(valid) == 2
@@ -153,9 +164,11 @@ class TestValidateCsvRows:
         assert len(valid) == 2
         assert len(errors) == 1
         assert errors[0]["line"] == 3
-        assert ("input is required" in errors[0]["error"]
-                or "Field required" in errors[0]["error"]
-                or "type=missing" in errors[0]["error"])
+        assert (
+            "input is required" in errors[0]["error"]
+            or "Field required" in errors[0]["error"]
+            or "type=missing" in errors[0]["error"]
+        )
 
     def test_row_with_invalid_regex_reports_line_number(self):
         rows = [
@@ -183,7 +196,7 @@ class TestValidateCsvRows:
             {"input": "Q3", "requires_json": "yes"},
             {"input": "Q4", "requires_json": "no"},
         ]
-        valid, errors = validate_csv_rows(rows)
+        valid, _errors = validate_csv_rows(rows)
         assert len(valid) == 4
         assert valid[0].requires_json is True
         assert valid[1].requires_json is False

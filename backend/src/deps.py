@@ -1,10 +1,11 @@
 from sqlmodel import select
 
 from src.models import ProviderCredential
+
+from .config import settings
+from .llm import PROVIDERS, LLMProviderConfig
 from .security import decrypt_api_key
 
-from .llm import PROVIDERS, LLMProviderConfig
-from .config import settings
 
 def get_llm_provider(
     provider: str,
@@ -30,7 +31,7 @@ def get_llm_provider(
             select(ProviderCredential).where(
                 ProviderCredential.user_id == user_id,
                 ProviderCredential.provider == provider.lower(),
-                ProviderCredential.is_active == True,
+                ProviderCredential.is_active,
             )
         ).first()
         if cred:

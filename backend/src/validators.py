@@ -1,17 +1,17 @@
 import re
-from typing import Optional
+
 from pydantic import BaseModel, field_validator, model_validator
 
 
 class DatasetRow(BaseModel):
     input: str
-    expected: Optional[str] = None
-    regex: Optional[str] = None
-    min_words: Optional[int] = None
-    max_words: Optional[int] = None
-    required_keywords: Optional[str] = None
-    forbidden_keywords: Optional[str] = None
-    requires_json: Optional[bool] = None
+    expected: str | None = None
+    regex: str | None = None
+    min_words: int | None = None
+    max_words: int | None = None
+    required_keywords: str | None = None
+    forbidden_keywords: str | None = None
+    requires_json: bool | None = None
 
     @field_validator("input")
     @classmethod
@@ -22,31 +22,34 @@ class DatasetRow(BaseModel):
 
     @field_validator("regex")
     @classmethod
-    def validate_regex(cls, v: Optional[str]) -> Optional[str]:
+    def validate_regex(cls, v: str | None) -> str | None:
         if v is not None:
             try:
                 re.compile(v)
             except re.error as e:
-                raise ValueError(f"invalid regex pattern: {e}")
+                raise ValueError(f"invalid regex pattern: {e}") from None
         return v
 
     @field_validator("min_words")
     @classmethod
-    def min_words_non_negative(cls, v: Optional[int]) -> Optional[int]:
+    def min_words_non_negative(cls, v: int | None) -> int | None:
         if v is not None and v < 0:
             raise ValueError("min_words must be >= 0")
         return v
 
     @field_validator("max_words")
     @classmethod
-    def max_words_gte_min(cls, v: Optional[int]) -> Optional[int]:
+    def max_words_gte_min(cls, v: int | None) -> int | None:
         return v
 
     @model_validator(mode="after")
     def check_min_max_words(self) -> "DatasetRow":
-        if self.min_words is not None and self.max_words is not None:
-            if self.min_words > self.max_words:
-                raise ValueError("min_words cannot be greater than max_words")
+        if (
+            self.min_words is not None
+            and self.max_words is not None
+            and self.min_words > self.max_words
+        ):
+            raise ValueError("min_words cannot be greater than max_words")
         return self
 
     @field_validator("requires_json", mode="before")
@@ -59,15 +62,20 @@ class DatasetRow(BaseModel):
 
 REQUIRED_COLUMNS = {"input"}
 OPTIONAL_COLUMNS = {
-    "expected", "regex", "min_words", "max_words",
-    "required_keywords", "forbidden_keywords", "requires_json"
+    "expected",
+    "regex",
+    "min_words",
+    "max_words",
+    "required_keywords",
+    "forbidden_keywords",
+    "requires_json",
 }
 ALL_COLUMNS = REQUIRED_COLUMNS | OPTIONAL_COLUMNS
 
 
 def validate_csv_headers(headers: list[str]) -> list[str]:
     """Return list of header errors (empty if valid)."""
-    headers_set = set(h.strip().lower() for h in headers)
+    headers_set = {h.strip().lower() for h in headers}
     missing = REQUIRED_COLUMNS - headers_set
     extra = headers_set - ALL_COLUMNS
     errors = []
@@ -85,7 +93,7 @@ def validate_csv_rows(rows: list[dict]) -> tuple[list[DatasetRow], list[dict]]:
     """
     valid = []
     errors = []
-    for i, row in enumerate(rows, start=2):   
+    for i, row in enumerate(rows, start=2):
         normalized = {k.strip().lower(): v for k, v in row.items()}
         try:
             valid.append(DatasetRow(**normalized))

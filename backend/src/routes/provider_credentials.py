@@ -1,13 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlmodel import select
+
 from src.db import SessionDep
-from src.models import ProviderCredential, Users, ProofUserRole
+from src.llm import PROVIDERS
+from src.models import ProviderCredential, Users
 from src.security import encrypt_api_key
 from src.utils import get_current_user
-from src.llm import PROVIDERS
 
-router = APIRouter(prefix="/api/provider-credentials", dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/api/provider-credentials", dependencies=[Depends(get_current_user)]
+)
 
 
 class ProviderCredentialCreate(BaseModel):
@@ -32,7 +35,7 @@ def list_credentials(
     """List the current user's stored provider credentials (keys are masked)."""
     stmt = select(ProviderCredential).where(
         ProviderCredential.user_id == user.id,
-        ProviderCredential.is_active == True,
+        ProviderCredential.is_active,
     )
     creds = session.exec(stmt).all()
     return [
@@ -47,7 +50,9 @@ def list_credentials(
     ]
 
 
-@router.post("", response_model=ProviderCredentialResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=ProviderCredentialResponse, status_code=status.HTTP_201_CREATED
+)
 def upsert_credential(
     data: ProviderCredentialCreate,
     session: SessionDep,
@@ -61,7 +66,7 @@ def upsert_credential(
     stmt = select(ProviderCredential).where(
         ProviderCredential.user_id == user.id,
         ProviderCredential.provider == provider,
-        ProviderCredential.is_active == True,
+        ProviderCredential.is_active,
     )
     existing = session.exec(stmt).first()
 
@@ -112,4 +117,3 @@ def delete_credential(
     cred.is_active = False
     session.add(cred)
     session.commit()
-    return None

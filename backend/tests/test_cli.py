@@ -1,27 +1,27 @@
-import sys
-import os
 import csv
+import os
+import sys
 import tempfile
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
-import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+
 from typer.testing import CliRunner
-from unittest.mock import MagicMock, AsyncMock, patch
 
 from src.cli import app
-
 
 runner = CliRunner()
 
 
 def _make_csv(rows, suffix=".csv"):
-    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False, newline="")
-    writer = csv.DictWriter(tmp, fieldnames=["input", "expected"])
-    writer.writeheader()
-    for row in rows:
-        writer.writerow(row)
-    tmp.close()
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=suffix, delete=False, newline=""
+    ) as tmp:
+        writer = csv.DictWriter(tmp, fieldnames=["input", "expected"])
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
     return tmp.name
 
 
@@ -34,40 +34,58 @@ class TestCliVersion:
 
 class TestCliDatasetCreate:
     def test_dataset_create_csv_not_found(self):
-        result = runner.invoke(app, ["dataset", "create", "--csv", "/nonexistent/file.csv"])
+        result = runner.invoke(
+            app, ["dataset", "create", "--csv", "/nonexistent/file.csv"]
+        )
         assert result.exit_code == 1
         assert "File not found" in result.output
 
     def test_dataset_create_empty_csv(self):
         csv_path = _make_csv([])
         try:
-            result = runner.invoke(app, ["dataset", "create", "--csv", csv_path, "--name", "empty"])
+            result = runner.invoke(
+                app, ["dataset", "create", "--csv", csv_path, "--name", "empty"]
+            )
             assert result.exit_code == 0
-            assert "Dataset created" in result.output or "already exists" in result.output
+            assert (
+                "Dataset created" in result.output or "already exists" in result.output
+            )
         finally:
             os.unlink(csv_path)
 
     def test_dataset_create_success(self):
-        csv_path = _make_csv([
-            {"input": "What is 2+2?", "expected": "4"},
-            {"input": "Capital of France?", "expected": "Paris"},
-        ])
+        csv_path = _make_csv(
+            [
+                {"input": "What is 2+2?", "expected": "4"},
+                {"input": "Capital of France?", "expected": "Paris"},
+            ]
+        )
         try:
-            result = runner.invoke(app, ["dataset", "create", "--csv", csv_path, "--name", "test-dataset"])
+            result = runner.invoke(
+                app, ["dataset", "create", "--csv", csv_path, "--name", "test-dataset"]
+            )
             assert result.exit_code == 0
-            assert "Dataset created" in result.output or "already exists" in result.output
+            assert (
+                "Dataset created" in result.output or "already exists" in result.output
+            )
             assert "test-dataset" in result.output
         finally:
             os.unlink(csv_path)
 
     def test_dataset_create_dedup_by_hash(self):
-        csv_path = _make_csv([
-            {"input": "What is 2+2?", "expected": "4"},
-        ])
+        csv_path = _make_csv(
+            [
+                {"input": "What is 2+2?", "expected": "4"},
+            ]
+        )
         try:
-            result1 = runner.invoke(app, ["dataset", "create", "--csv", csv_path, "--name", "first"])
+            result1 = runner.invoke(
+                app, ["dataset", "create", "--csv", csv_path, "--name", "first"]
+            )
             assert result1.exit_code == 0
-            result2 = runner.invoke(app, ["dataset", "create", "--csv", csv_path, "--name", "second"])
+            result2 = runner.invoke(
+                app, ["dataset", "create", "--csv", csv_path, "--name", "second"]
+            )
             assert result2.exit_code == 0
             assert "already exists" in result2.output
         finally:
@@ -81,11 +99,15 @@ class TestCliDatasetList:
         assert "DATASETS" in result.output
 
     def test_dataset_list_with_data(self):
-        csv_path = _make_csv([
-            {"input": "Q1?", "expected": "A1"},
-        ])
+        csv_path = _make_csv(
+            [
+                {"input": "Q1?", "expected": "A1"},
+            ]
+        )
         try:
-            runner.invoke(app, ["dataset", "create", "--csv", csv_path, "--name", "list-test"])
+            runner.invoke(
+                app, ["dataset", "create", "--csv", csv_path, "--name", "list-test"]
+            )
             result = runner.invoke(app, ["dataset", "list"])
             assert result.exit_code == 0
             assert "list-test" in result.output
@@ -100,18 +122,23 @@ class TestCliDatasetShow:
         assert "not found" in result.output
 
     def test_dataset_show_success(self):
-        csv_path = _make_csv([
-            {"input": "Q1?", "expected": "A1"},
-            {"input": "Q2?", "expected": "A2"},
-        ])
+        csv_path = _make_csv(
+            [
+                {"input": "Q1?", "expected": "A1"},
+                {"input": "Q2?", "expected": "A2"},
+            ]
+        )
         try:
-            create_result = runner.invoke(app, ["dataset", "create", "--csv", csv_path, "--name", "show-test"])
+            create_result = runner.invoke(
+                app, ["dataset", "create", "--csv", csv_path, "--name", "show-test"]
+            )
             assert create_result.exit_code == 0
             # Show by ID 1 - may not exist if other tests created datasets first
             result = runner.invoke(app, ["dataset", "show", "1"])
             assert result.exit_code in [0, 1]  # 0 if found, 1 if not found
         finally:
             os.unlink(csv_path)
+
 
 class TestCliRun:
     def test_run_csv_not_found(self):
@@ -134,11 +161,16 @@ class TestCliRun:
         mock_client.aio.interactions.create = AsyncMock(return_value=mock_interaction)
         mock_genai_client.return_value = mock_client
 
-        csv_path = _make_csv([
-            {"input": "What is the capital of France?", "expected": "Paris"},
-        ])
+        csv_path = _make_csv(
+            [
+                {"input": "What is the capital of France?", "expected": "Paris"},
+            ]
+        )
         try:
-            result = runner.invoke(app, ["run", "--questions", csv_path, "--model", "gemini-3.5-flash-lite"])
+            result = runner.invoke(
+                app,
+                ["run", "--questions", csv_path, "--model", "gemini-3.5-flash-lite"],
+            )
             assert result.exit_code == 0
             assert "Score:" in result.output
         finally:

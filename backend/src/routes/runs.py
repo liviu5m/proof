@@ -1,21 +1,34 @@
-from typing import Any
 import csv
 import io
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import desc
 from sqlmodel import select
+
 from src.db import SessionDep, supabase
 from src.deps import get_llm_provider
-from src.models import Datasets, ProofUserRole, Runs, Results, Users
-from src.utils import get_current_user, require_member, require_viewer, verifyUserTokenSession, sanitize_text, sanitize_prompt, verify_csrf
-from src.runner import run_tests
 from src.judge import judge_questions
-from src.validators import validate_csv_headers, validate_csv_rows
-from datetime import datetime, timezone
+from src.models import Datasets, ProofUserRole, Results, Runs, Users
 from src.rate_limit import check_concurrent_run, rate_limit_runs, release_concurrent_run
+from src.runner import run_tests
+from src.utils import (
+    get_current_user,
+    require_member,
+    require_viewer,
+    sanitize_prompt,
+    sanitize_text,
+    verify_csrf,
+    verifyUserTokenSession,
+)
+from src.validators import validate_csv_headers, validate_csv_rows
 
-router = APIRouter(prefix="/api/runs", dependencies=[Depends(verifyUserTokenSession), Depends(rate_limit_runs)])
+router = APIRouter(
+    prefix="/api/runs",
+    dependencies=[Depends(verifyUserTokenSession), Depends(rate_limit_runs)],
+)
+
 
 class RunCreateRequest(BaseModel):
     dataset_id: int
@@ -27,39 +40,59 @@ class RunCreateRequest(BaseModel):
     ollama_base_url: str | None = None
     ollama_base_url_judge: str | None = None
 
+
 @router.post("/")
 async def createRun(
     payload: RunCreateRequest,
     session: SessionDep,
     user: Users = Depends(get_current_user),
     _: Users = Depends(require_member),
-    __: Request = Depends(verify_csrf)
+    __: Request = Depends(verify_csrf),
 ):
     if not user or not user.id:
-        raise HTTPException(status_code=404, detail={"error": "User not found", "code": "not_found"})
+        raise HTTPException(
+            status_code=404, detail={"error": "User not found", "code": "not_found"}
+        )
     dataset = session.get(Datasets, payload.dataset_id)
     if not dataset or dataset.deleted_at is not None:
-        raise HTTPException(status_code=404, detail={"error": "Dataset not found", "code": "not_found"})
+        raise HTTPException(
+            status_code=404, detail={"error": "Dataset not found", "code": "not_found"}
+        )
     if user.role != ProofUserRole.ADMIN and dataset.user_id != user.id:
-        raise HTTPException(status_code=403, detail={"error": "Not your dataset", "code": "forbidden"})
+        raise HTTPException(
+            status_code=403, detail={"error": "Not your dataset", "code": "forbidden"}
+        )
     try:
         file_bytes = supabase.storage.from_("datasets").download(dataset.source_path)
         csv_file = io.StringIO(file_bytes.decode("utf-8"))
         reader = csv.DictReader(csv_file)
         rows = list(reader)
     except Exception as e:
-        raise HTTPException(status_code=500, detail={"error": f"Failed to load dataset file: {str(e)}", "code": "dataset_load_failed"})
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": f"Failed to load dataset file: {e!s}",
+                "code": "dataset_load_failed",
+            },
+        ) from None
 
     if not rows:
-        raise HTTPException(status_code=400, detail={"error": "Dataset is empty", "code": "empty_dataset"})
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Dataset is empty", "code": "empty_dataset"},
+        )
 
     header_errors = validate_csv_headers(reader.fieldnames or [])
     if header_errors:
-        raise HTTPException(status_code=400, detail={"errors": header_errors, "code": "invalid_headers"})
+        raise HTTPException(
+            status_code=400, detail={"errors": header_errors, "code": "invalid_headers"}
+        )
 
     valid_rows, row_errors = validate_csv_rows(rows)
     if row_errors:
-        raise HTTPException(status_code=400, detail={"errors": row_errors, "code": "invalid_rows"})
+        raise HTTPException(
+            status_code=400, detail={"errors": row_errors, "code": "invalid_rows"}
+        )
 
     clean_system_prompt = sanitize_prompt(payload.system_prompt)
     clean_judge_model = sanitize_text(payload.judge_model, max_length=100)
@@ -77,9 +110,10 @@ async def createRun(
         ollama_base_url=payload.ollama_base_url_judge,
     )
     try:
-
         rows_as_dicts = [r.model_dump() for r in valid_rows]
-        data = await run_tests(rows_as_dicts, clean_system_prompt, payload.model, provider)
+        data = await run_tests(
+            rows_as_dicts, clean_system_prompt, payload.model, provider
+        )
         scores = await judge_questions(data, clean_judge_model, provider_judge)
     finally:
         await release_concurrent_run(user.id)
@@ -93,13 +127,15 @@ async def createRun(
         judge_model=clean_judge_model,
         avg_score=avg_score,
         total=len(data),
-        status="Completed"
+        status="Completed",
     )
     session.add(run)
     session.commit()
     session.refresh(run)
 
-    for idx, (row, result, score) in enumerate(zip(valid_rows, data, scores)):
+    for idx, (row, result, score) in enumerate(
+        zip(valid_rows, data, scores, strict=False)
+    ):
         res = Results(
             run_id=run.id,
             idx=idx,
@@ -116,50 +152,56 @@ async def createRun(
         "run_id": run.id,
         "avg_score": avg_score,
         "total": len(data),
-        "status": "completed"
+        "status": "completed",
     }
+
 
 @router.get("/")
 async def getRuns(
     search: str | None = None,
-    session: SessionDep = None,# type: ignore
+    session: SessionDep = None,  # type: ignore
     user: Users = Depends(get_current_user),
-    _: Users = Depends(require_viewer)
+    _: Users = Depends(require_viewer),
 ):
     runs_stmt = (
         select(Runs, Datasets.name)
         .join(Datasets)
-        .where(Datasets.deleted_at == None)   # noqa: E711
-        .where(Runs.deleted_at == None)         # noqa: E711
+        .where(Datasets.deleted_at is None)
+        .where(Runs.deleted_at is None)
     )
     if user.role != ProofUserRole.ADMIN:
         runs_stmt = runs_stmt.where(Datasets.user_id == user.id)
     if search:
-        from sqlalchemy import or_, cast, String
+        from sqlalchemy import String, cast, or_
+
         runs_stmt = runs_stmt.where(
             or_(
                 Datasets.name.ilike(f"%{search}%"),
                 Runs.model.ilike(f"%{search}%"),
-                cast(Runs.id, String).ilike(f"%{search}%")
+                cast(Runs.id, String).ilike(f"%{search}%"),
             )
         )
     runs_stmt = runs_stmt.order_by(desc(Runs.created_at))
     runs = session.exec(runs_stmt).all()
-    
+
     response = []
     for run, dataset_name in runs:
-        results_stmt = select(Results).where(
-            Results.run_id == run.id,
-            Results.deleted_at == None   # noqa: E711
-        ).order_by(Results.idx)
+        results_stmt = (
+            select(Results)
+            .where(Results.run_id == run.id, Results.deleted_at is None)
+            .order_by(Results.idx)
+        )
         results = session.exec(results_stmt).all()
-        
-        response.append({
-            **run.model_dump(),
-            "datasetName": dataset_name,
-            "results": [r.model_dump() for r in results]
-        })
+
+        response.append(
+            {
+                **run.model_dump(),
+                "datasetName": dataset_name,
+                "results": [r.model_dump() for r in results],
+            }
+        )
     return response
+
 
 @router.get("/{run_id}")
 async def get_run(
@@ -170,47 +212,64 @@ async def get_run(
 ):
     run = session.get(Runs, run_id)
     if not run or run.deleted_at is not None:
-        raise HTTPException(status_code=404, detail={"error": "Run not found", "code": "not_found"})
-    
+        raise HTTPException(
+            status_code=404, detail={"error": "Run not found", "code": "not_found"}
+        )
+
     dataset = session.get(Datasets, run.dataset_id)
     if not dataset:
-        raise HTTPException(status_code=404, detail={"error": "Dataset not found", "code": "not_found"})
-    
+        raise HTTPException(
+            status_code=404, detail={"error": "Dataset not found", "code": "not_found"}
+        )
+
     if user.role != ProofUserRole.ADMIN and dataset.user_id != user.id:
-        raise HTTPException(status_code=403, detail={"error": "Not your run", "code": "forbidden"})
-    
-    results_stmt = select(Results).where(
-        Results.run_id == run.id,
-        Results.deleted_at == None,
-    ).order_by(Results.idx)
+        raise HTTPException(
+            status_code=403, detail={"error": "Not your run", "code": "forbidden"}
+        )
+
+    results_stmt = (
+        select(Results)
+        .where(
+            Results.run_id == run.id,
+            Results.deleted_at is None,
+        )
+        .order_by(Results.idx)
+    )
     results = session.exec(results_stmt).all()
-    
+
     return {
         **run.model_dump(),
         "datasetName": dataset.name,
         "results": [r.model_dump() for r in results],
     }
 
+
 @router.delete("/{run_id}")
 async def delete_run(
     run_id: int,
     session: SessionDep,
     user: Users = Depends(get_current_user),
-    _: Users = Depends(require_member),  
-    __: Request = Depends(verify_csrf)
+    _: Users = Depends(require_member),
+    __: Request = Depends(verify_csrf),
 ):
     run = session.get(Runs, run_id)
     if not run or run.deleted_at is not None:
-        raise HTTPException(status_code=404, detail={"error": "Run not found", "code": "not_found"})
-    
+        raise HTTPException(
+            status_code=404, detail={"error": "Run not found", "code": "not_found"}
+        )
+
     dataset = session.get(Datasets, run.dataset_id)
     if not dataset:
-        raise HTTPException(status_code=404, detail={"error": "Dataset not found", "code": "not_found"})
-    
+        raise HTTPException(
+            status_code=404, detail={"error": "Dataset not found", "code": "not_found"}
+        )
+
     if user.role != ProofUserRole.ADMIN and dataset.user_id != user.id:
-        raise HTTPException(status_code=403, detail={"error": "Not your run", "code": "forbidden"})
-    
-    run.deleted_at = datetime.now(timezone.utc)
+        raise HTTPException(
+            status_code=403, detail={"error": "Not your run", "code": "forbidden"}
+        )
+
+    run.deleted_at = datetime.now(UTC)
     session.add(run)
     session.commit()
     return {"success": "Run deleted"}

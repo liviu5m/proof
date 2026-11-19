@@ -1,15 +1,16 @@
 import pytest
+
 from src.utils import (
-    sanitize_text,
-    sanitize_prompt,
     createAccessToken,
     decodeToken,
-    hashPassword,
-    verifyPassword,
     generate6DigitCode,
-    nowPlusMinutes,
-    getUserIdFromToken,
     get_file_hash,
+    getUserIdFromToken,
+    hashPassword,
+    nowPlusMinutes,
+    sanitize_prompt,
+    sanitize_text,
+    verifyPassword,
 )
 
 
@@ -18,7 +19,10 @@ class TestSanitizeText:
         assert sanitize_text("  hello   world  ") == "hello world"
 
     def test_escapes_html(self):
-        assert sanitize_text("<script>alert('xss')</script>") == "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;"
+        assert (
+            sanitize_text("<script>alert('xss')</script>")
+            == "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;"
+        )
 
     def test_removes_null_bytes(self):
         assert sanitize_text("hello\x00world") == "helloworld"
@@ -81,7 +85,9 @@ class TestSanitizePrompt:
 
 class TestTokenRoundTrip:
     def test_create_and_decode_token(self):
-        token = createAccessToken({"id": 1, "email": "test@example.com", "name": "Test"})
+        token = createAccessToken(
+            {"id": 1, "email": "test@example.com", "name": "Test"}
+        )
         assert isinstance(token, str)
         assert len(token) > 0
 
@@ -136,6 +142,7 @@ class TestGenerate6DigitCode:
 class TestNowPlusMinutes:
     def test_returns_future_datetime(self):
         from datetime import datetime, timedelta
+
         result = nowPlusMinutes(30)
         assert isinstance(result, datetime)
         assert result > datetime.now()
@@ -154,7 +161,9 @@ class TestGetUserIdFromToken:
 
 class TestGetFileHash:
     def test_returns_hash_for_existing_file(self):
-        import tempfile, os
+        import os
+        import tempfile
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("hello world")
             tmp_path = f.name
@@ -169,7 +178,9 @@ class TestGetFileHash:
 class TestGetCurrentUser:
     def test_get_current_user_no_token(self):
         from unittest.mock import MagicMock
+
         from fastapi import HTTPException
+
         from src.utils import get_current_user
 
         mock_request = MagicMock()
@@ -178,15 +189,18 @@ class TestGetCurrentUser:
 
         try:
             import asyncio
+
             asyncio.run(get_current_user(mock_request, mock_session))
-            assert False, "Should have raised HTTPException"
+            raise AssertionError("Should have raised HTTPException")
         except HTTPException as e:
             assert e.status_code == 401
 
     def test_get_current_user_user_not_found(self):
         from unittest.mock import MagicMock
+
         from fastapi import HTTPException
-        from src.utils import get_current_user, createAccessToken
+
+        from src.utils import createAccessToken, get_current_user
 
         token = createAccessToken({"id": 99999, "email": "nonexistent@example.com"})
         mock_request = MagicMock()
@@ -196,14 +210,17 @@ class TestGetCurrentUser:
 
         try:
             import asyncio
+
             asyncio.run(get_current_user(mock_request, mock_session))
-            assert False, "Should have raised HTTPException"
+            raise AssertionError("Should have raised HTTPException")
         except HTTPException as e:
             assert e.status_code == 401
 
     def test_get_current_user_invalid_token(self):
         from unittest.mock import MagicMock
+
         from fastapi import HTTPException
+
         from src.utils import get_current_user
 
         mock_request = MagicMock()
@@ -212,7 +229,8 @@ class TestGetCurrentUser:
 
         try:
             import asyncio
+
             asyncio.run(get_current_user(mock_request, mock_session))
-            assert False, "Should have raised HTTPException"
+            raise AssertionError("Should have raised HTTPException")
         except HTTPException as e:
             assert e.status_code == 401

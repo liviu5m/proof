@@ -1,38 +1,48 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, AsyncMock, patch
-from src.main import app
-from src.db import get_session, engine as _engine, _get_engine
-from src.deps import get_llm_provider
-from src.llm.base import LLMResponse
-from src.utils import get_current_user, verifyUserTokenSession, createAccessToken
-from src.models import Users, Datasets, Runs
-from src.rate_limit import rate_limit_runs, rate_limit_datasets
 from sqlmodel import Session, select
 
+from src.deps import get_llm_provider
+from src.llm.base import LLMResponse
+from src.main import app
+from src.models import Datasets, Users
+from src.rate_limit import rate_limit_datasets, rate_limit_runs
+from src.utils import createAccessToken, get_current_user, verifyUserTokenSession
 
 # ---- Mock helpers ----
 
+
 def _mock_current_user():
-    return Users(id=1, email="test@example.com", name="Test User", provider="credentials")
+    return Users(
+        id=1, email="test@example.com", name="Test User", provider="credentials"
+    )
 
 
 def _mock_llm_provider():
     mock_provider = MagicMock()
+
     async def mock_generate(*args, **kwargs):
         return LLMResponse(text='{"answer": "Paris"}')
+
     mock_provider.generate = mock_generate
     return mock_provider
 
 
 def _apply_overrides():
-    app.dependency_overrides[get_current_user] = lambda request=None, session=None: _mock_current_user()
-    app.dependency_overrides[verifyUserTokenSession] = lambda request=None: {"id": 1, "email": "test@example.com"}
+    app.dependency_overrides[get_current_user] = lambda request=None, session=None: (
+        _mock_current_user()
+    )
+    app.dependency_overrides[verifyUserTokenSession] = lambda request=None: {
+        "id": 1,
+        "email": "test@example.com",
+    }
     app.dependency_overrides[get_llm_provider] = _mock_llm_provider
     # Bypass rate limiter (Redis unavailable in tests; source returns None -> TypeError)
     app.dependency_overrides[rate_limit_runs] = lambda: None
@@ -50,13 +60,16 @@ def _mock_supabase_storage():
     mock_from_ = MagicMock()
     mock_from_.upload = MagicMock(return_value=None)
     mock_from_.download = MagicMock(return_value=b"input,expected\nWhat is 2+2?,4\n")
-    mock_from_.create_signed_url = MagicMock(return_value={"signedURL": "http://example.com/signed"})
+    mock_from_.create_signed_url = MagicMock(
+        return_value={"signedURL": "http://example.com/signed"}
+    )
     mock_storage.from_ = MagicMock(return_value=mock_from_)
     mock_supabase.storage = mock_storage
     return mock_supabase
 
 
 # ---- Fixtures ----
+
 
 @pytest.fixture
 def client():
@@ -74,6 +87,7 @@ def authed_client():
 
 
 # ---- Auth routes ----
+
 
 class TestAuthRoutes:
     def test_register_missing_fields(self, client):
@@ -96,7 +110,9 @@ class TestAuthRoutes:
             pytest.skip("bcrypt/passlib incompatible in this environment")
 
     def test_login_missing_fields(self, client):
-        response = client.post("/api/auth/login", json={"email": "test@example.com", "password": "wrong"})
+        response = client.post(
+            "/api/auth/login", json={"email": "test@example.com", "password": "wrong"}
+        )
         assert response.status_code in [400, 401, 422]
 
     def test_logout(self, client):
@@ -105,6 +121,7 @@ class TestAuthRoutes:
 
 
 # ---- User routes ----
+
 
 class TestUserRoutes:
     def test_user_jwt_unauthorized(self, client):
@@ -117,6 +134,7 @@ class TestUserRoutes:
 
 
 # ---- Dataset routes ----
+
 
 class TestDatasetRoutes:
     def test_dataset_unauthorized(self, client):
@@ -142,6 +160,7 @@ class TestDatasetRoutes:
 
 # ---- Runs routes ----
 
+
 class TestRunsRoutes:
     def test_runs_unauthorized(self, client):
         response = client.get("/api/runs/")
@@ -157,7 +176,6 @@ class TestRunsRoutes:
     def test_get_runs_with_override(self, authed_client):
         response = authed_client.get("/api/runs/")
         assert response.status_code in [200, 401, 403, 500]
-
 
 
 class TestHealthEndpoints:
@@ -189,6 +207,7 @@ class TestDatasetSuccessPaths:
         mock_supabase.storage = mock_storage
 
         import io
+
         csv_content = b"input,expected\nWhat is 2+2?,4\nCapital of France?,Paris\n"
         response = authed_client.post(
             "/api/dataset/",
@@ -201,7 +220,9 @@ class TestDatasetSuccessPaths:
     def test_get_dataset_with_data(self, mock_supabase, authed_client):
         mock_storage = MagicMock()
         mock_from_ = MagicMock()
-        mock_from_.create_signed_url = MagicMock(return_value={"signedURL": "http://example.com/signed"})
+        mock_from_.create_signed_url = MagicMock(
+            return_value={"signedURL": "http://example.com/signed"}
+        )
         mock_storage.from_ = MagicMock(return_value=mock_from_)
         mock_supabase.storage = mock_storage
 
@@ -224,7 +245,9 @@ class TestRunsSuccessPaths:
     def test_create_run_with_existing_dataset(self, mock_supabase, authed_client):
         mock_storage = MagicMock()
         mock_from_ = MagicMock()
-        mock_from_.download = MagicMock(return_value=b"input,expected\nWhat is 2+2?,4\n")
+        mock_from_.download = MagicMock(
+            return_value=b"input,expected\nWhat is 2+2?,4\n"
+        )
         mock_storage.from_ = MagicMock(return_value=mock_from_)
         mock_supabase.storage = mock_storage
 
@@ -237,12 +260,15 @@ class TestRunsSuccessPaths:
 
 # ---- Data-seeded integration tests ----
 
+
 @pytest.fixture
 def seeded_db():
     """Create a test user and dataset in the test database."""
     import uuid
+
+    from sqlmodel import Session
+
     from tests.conftest import test_engine
-    from sqlmodel import Session, select
 
     unique_suffix = uuid.uuid4().hex[:8]
     email = f"seeded_{unique_suffix}@example.com"
@@ -273,7 +299,9 @@ class TestUserSeeded:
     def test_get_auth_user_success(self, seeded_db, authed_client):
         """Test getAuthUser with a valid JWT cookie and user in DB."""
         user = seeded_db["user"]
-        token = createAccessToken({"id": user.id, "email": user.email, "name": user.name})
+        token = createAccessToken(
+            {"id": user.id, "email": user.email, "name": user.name}
+        )
 
         response = authed_client.get(
             "/api/user/jwt",
@@ -294,7 +322,9 @@ class TestRunsSeeded:
         dataset = seeded_db["dataset"]
         mock_storage = MagicMock()
         mock_from_ = MagicMock()
-        mock_from_.download = MagicMock(return_value=b"input,expected\nWhat is 2+2?,4\n")
+        mock_from_.download = MagicMock(
+            return_value=b"input,expected\nWhat is 2+2?,4\n"
+        )
         mock_storage.from_ = MagicMock(return_value=mock_from_)
         mock_supabase.storage = mock_storage
 
@@ -312,28 +342,32 @@ class TestRunsSeeded:
 
 # ---- deps.py and db.py coverage ----
 
+
 class TestDepsGetLLMProvider:
     def test_get_llm_provider_returns_google_provider(self):
         from src.deps import get_llm_provider
         from src.llm.providers import GoogleGenAIProvider
+
         result = get_llm_provider("google")
         assert isinstance(result, GoogleGenAIProvider)
         assert result.provider_name == "google"
 
     def test_get_llm_provider_unknown_raises(self):
         from src.deps import get_llm_provider
+
         try:
             get_llm_provider("nonexistent")
-            assert False, "Should have raised ValueError"
+            raise AssertionError("Should have raised ValueError")
         except ValueError:
             pass
 
 
 class TestDbFunctions:
     def test_get_supabase(self):
-        from src.db import _get_supabase, _supabase
         # Reset the cached supabase client
         import src.db as db_module
+        from src.db import _get_supabase
+
         db_module._supabase = None
         with patch("src.db.create_client") as mock_create_client:
             mock_instance = MagicMock()
@@ -343,28 +377,32 @@ class TestDbFunctions:
             mock_create_client.assert_called_once()
 
     def test_init_db(self):
+        from contextlib import suppress
+
         from src.db import init_db
-        from tests.conftest import test_engine
+
         # init_db uses _get_engine() which reads DATABASE_URL from env
         # Since DATABASE_URL is set to test.db, this should work
-        try:
+        with suppress(Exception):
             init_db()
-        except Exception:
-            # May fail if DATABASE_URL not set properly in test env
-            pass
 
     def test_get_engine_valueerror_when_no_db_url(self):
         """Verify DATABASE_URL is configured in test environment."""
+
         from src.db import DATABASE_URL
-        import os
+
         assert DATABASE_URL is not None, "DATABASE_URL should be set"
 
 
 # ---- Additional route coverage (provider-credentials, models, auth, user) ----
 
+
 def _create_test_user(session, email="cov@example.com", name="Cov User"):
     from src.models import ProofUserRole, Users
-    user = Users(email=email, name=name, provider="credentials", role=ProofUserRole.MEMBER)
+
+    user = Users(
+        email=email, name=name, provider="credentials", role=ProofUserRole.MEMBER
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -375,7 +413,10 @@ def _client_for_user(user):
     """Return a TestClient with get_current_user overridden to the given DB user."""
     _clear_overrides()
     app.dependency_overrides[get_current_user] = lambda request=None, session=None: user
-    app.dependency_overrides[verifyUserTokenSession] = lambda request=None: {"id": user.id, "email": user.email}
+    app.dependency_overrides[verifyUserTokenSession] = lambda request=None: {
+        "id": user.id,
+        "email": user.email,
+    }
     app.dependency_overrides[get_llm_provider] = _mock_llm_provider
     app.dependency_overrides[rate_limit_runs] = lambda: None
     app.dependency_overrides[rate_limit_datasets] = lambda: None
@@ -389,6 +430,7 @@ class TestProviderCredentialsRoutes:
 
     def test_create_and_delete_credential(self):
         from tests.conftest import test_engine
+
         with Session(test_engine) as session:
             user = _create_test_user(session)
         client = _client_for_user(user)
@@ -425,7 +467,9 @@ class TestModelsRoutes:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"data": []}
-        mock_http_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+        mock_http_client.return_value.__aenter__.return_value.get = AsyncMock(
+            return_value=mock_resp
+        )
         response = authed_client.post("/api/models/sync")
         assert response.status_code in [200, 401, 403, 500]
 
@@ -433,7 +477,9 @@ class TestModelsRoutes:
 class TestUserRoutesExtended:
     def test_get_auth_user_with_token(self, seeded_db, authed_client):
         user = seeded_db["user"]
-        token = createAccessToken({"id": user.id, "email": user.email, "name": user.name})
+        token = createAccessToken(
+            {"id": user.id, "email": user.email, "name": user.name}
+        )
         response = authed_client.get(
             "/api/user/jwt",
             cookies={"jwt": token},
@@ -462,8 +508,9 @@ class TestUserRoutesExtended:
 # ---- Auth login with real DB user ----
 class TestAuthLoginReal:
     def test_login_wrong_password(self, client):
-        from tests.conftest import test_engine
         from src.utils import hashPassword
+        from tests.conftest import test_engine
+
         with Session(test_engine) as session:
             user = _create_test_user(session, email="pw@example.com", name="Pw User")
             user.password = hashPassword("correctpass")
@@ -485,10 +532,13 @@ class TestAuthLoginReal:
                     session.commit()
 
     def test_login_unverified_email(self, client):
-        from tests.conftest import test_engine
         from src.utils import hashPassword
+        from tests.conftest import test_engine
+
         with Session(test_engine) as session:
-            user = _create_test_user(session, email="unverified@example.com", name="Unverified")
+            user = _create_test_user(
+                session, email="unverified@example.com", name="Unverified"
+            )
             user.password = hashPassword("correctpass")
             user.verified = False
             session.add(user)
@@ -523,12 +573,16 @@ class TestRunsRoutesExtended:
         assert response.status_code in [200, 401, 403, 404, 500]
 
     @patch("src.db.supabase", new_callable=MagicMock)
-    def test_create_run_with_existing_dataset(self, mock_supabase, seeded_db, authed_client):
+    def test_create_run_with_existing_dataset(
+        self, mock_supabase, seeded_db, authed_client
+    ):
         """Exercise the create-run route path with a real dataset."""
         dataset = seeded_db["dataset"]
         mock_storage = MagicMock()
         mock_from_ = MagicMock()
-        mock_from_.download = MagicMock(return_value=b"input,expected\nWhat is 2+2?,4\n")
+        mock_from_.download = MagicMock(
+            return_value=b"input,expected\nWhat is 2+2?,4\n"
+        )
         mock_storage.from_ = MagicMock(return_value=mock_from_)
         mock_supabase.storage = mock_storage
 
@@ -542,10 +596,13 @@ class TestRunsRoutesExtended:
 # ---- Auth login success (covers login route) ----
 class TestAuthLoginSuccess:
     def test_login_success(self, client):
-        from tests.conftest import test_engine
         from src.utils import hashPassword
+        from tests.conftest import test_engine
+
         with Session(test_engine) as session:
-            user = _create_test_user(session, email="loginsuccess@example.com", name="Login Success")
+            user = _create_test_user(
+                session, email="loginsuccess@example.com", name="Login Success"
+            )
             user.password = hashPassword("correctpass")
             user.verified = True
             session.add(user)

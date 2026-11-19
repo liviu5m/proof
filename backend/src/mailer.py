@@ -1,10 +1,12 @@
 import httpx
-from src.models import Users
+
 from src.config import settings
+from src.models import Users
 
 BREVO_API_KEY = settings.BREVO_API_KEY
 FROM_EMAIL = settings.FROM_EMAIL or "proofaiapp@gmail.com"
 FRONTEND_URL = settings.FRONTEND_URL or "http://localhost:3000"
+
 
 def _verification_html(token: str, user_name: str) -> str:
     verify_url = f"{FRONTEND_URL}/auth/verify-email?token={token}"
@@ -16,8 +18,12 @@ def _verification_html(token: str, user_name: str) -> str:
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Verify Your Email</title>
     </head>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; border-radius: 8px 8px 0 0; text-align: center;">
+    <body
+        style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
+    >
+        <div
+            style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; border-radius: 8px 8px 0 0; text-align: center;"
+        >
             <h1 style="color: white; margin: 0; font-size: 24px;">Proof</h1>
         </div>
         <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
@@ -92,7 +98,7 @@ def _send_email(
         "subject": subject,
         "htmlContent": html_body,
     }
-    
+
     response = httpx.post(url, json=payload, headers=headers, timeout=10.0)
     if response.status_code >= 400:
         raise Exception(f"Brevo API error: {response.status_code} - {response.text}")

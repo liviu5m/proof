@@ -1,11 +1,14 @@
 from cryptography.fernet import Fernet
 
 from .config import settings
+
 _ENCRYPTION_KEY = settings.ENCRYPTION_KEY
 if not _ENCRYPTION_KEY:
     raise ValueError("ENCRYPTION_KEY environment variable is required")
 
-_fernet = Fernet(_ENCRYPTION_KEY.encode() if isinstance(_ENCRYPTION_KEY, str) else _ENCRYPTION_KEY)
+_fernet = Fernet(
+    _ENCRYPTION_KEY.encode() if isinstance(_ENCRYPTION_KEY, str) else _ENCRYPTION_KEY
+)
 
 
 def encrypt_api_key(api_key: str) -> str:

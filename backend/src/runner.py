@@ -90,7 +90,11 @@ async def run_tests(questions, prompt, model, provider: LLMProvider):
     for r in results:
         if isinstance(r, Exception):
             normalized.append(
-                {"error": f"{type(r).__name__}: {r}", "response": None, "code": "task_exception"}
+                {
+                    "error": f"{type(r).__name__}: {r}",
+                    "response": None,
+                    "code": "task_exception",
+                }
             )
         else:
             normalized.append(r)

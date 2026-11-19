@@ -1,34 +1,34 @@
 import uuid
+
 from dotenv import load_dotenv
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from contextlib import asynccontextmanager
-from src.db import init_db, check_db_connection
-from src.models import Datasets
-from src.routes.auth import router as authRouter
-from src.routes.user import router as userRouter
-from src.routes.datasets import router as datasetsRouter
-from src.routes.runs import router as runsRouter
-from src.routes.models import router as modelsRouter 
-from src.routes.provider_credentials import router as providerCredentialsRouter 
-import os
-from src.config import settings
 from starlette.middleware.base import BaseHTTPMiddleware
-from fastapi import Request, Response
+
+from src.config import settings
+from src.db import check_db_connection
+from src.routes.auth import router as authRouter
+from src.routes.datasets import router as datasetsRouter
+from src.routes.models import router as modelsRouter
+from src.routes.provider_credentials import router as providerCredentialsRouter
+from src.routes.runs import router as runsRouter
+from src.routes.user import router as userRouter
 
 load_dotenv()
 
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL],  
+    allow_origins=[settings.FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response: Response = await call_next(request)
@@ -36,10 +36,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Content-Security-Policy"] = "default-src 'self'"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
         return response
 
+
 app.add_middleware(SecurityHeadersMiddleware)
+
+
 @app.on_event("startup")
 async def validate_config():
     """Fail fast if required config is missing."""
@@ -52,13 +57,16 @@ async def validate_config():
     if not check_db_connection():
         raise RuntimeError("Cannot connect to database. Check DATABASE_URL.")
 
+
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Strict-Transport-Security"] = (
+        "max-age=31536000; includeSubDomains"
+    )
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -71,6 +79,7 @@ async def add_security_headers(request: Request, call_next):
     )
     return response
 
+
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     detail = exc.detail
@@ -82,28 +91,46 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         code = "http_error"
     request_id = getattr(request.state, "request_id", "unknown")
     return JSONResponse(
-        {"error": error, "code": code, "status": exc.status_code, "request_id": request_id},
+        {
+            "error": error,
+            "code": code,
+            "status": exc.status_code,
+            "request_id": request_id,
+        },
         status_code=exc.status_code,
-        headers=getattr(exc, "headers", None)
+        headers=getattr(exc, "headers", None),
     )
+
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
 
     request_id = getattr(request.state, "request_id", "unknown")
     return JSONResponse(
-        {"error": "Validation error", "code": "validation_error", "detail": exc.errors(), "request_id": request_id},
+        {
+            "error": "Validation error",
+            "code": "validation_error",
+            "detail": exc.errors(),
+            "request_id": request_id,
+        },
         status_code=422,
     )
+
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
 
     request_id = getattr(request.state, "request_id", "unknown")
     return JSONResponse(
-        {"error": "Internal server error", "code": "internal_error", "detail": str(exc), "request_id": request_id},
+        {
+            "error": "Internal server error",
+            "code": "internal_error",
+            "detail": str(exc),
+            "request_id": request_id,
+        },
         status_code=500,
     )
+
 
 app.include_router(authRouter)
 app.include_router(userRouter)
@@ -112,9 +139,11 @@ app.include_router(runsRouter)
 app.include_router(providerCredentialsRouter)
 app.include_router(modelsRouter)
 
+
 @app.get("/")
 def root():
     return "Hello World"
+
 
 @app.get("/healthz")
 def healthz():
@@ -124,9 +153,12 @@ def healthz():
         "services": {
             "db": bool(settings.DATABASE_URL),
             "llm": bool(settings.GEMINI_API_KEY),
-            "storage": bool(settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY),
+            "storage": bool(
+                settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY
+            ),
         },
     }
+
 
 @app.get("/readyz")
 def readyz():
@@ -136,6 +168,8 @@ def readyz():
         "services": {
             "db": bool(settings.DATABASE_URL),
             "llm": bool(settings.GEMINI_API_KEY),
-            "storage": bool(settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY),
+            "storage": bool(
+                settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY
+            ),
         },
     }
