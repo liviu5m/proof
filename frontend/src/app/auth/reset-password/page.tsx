@@ -9,10 +9,7 @@ import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Lock } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
@@ -20,20 +17,9 @@ import { resetPassword } from "@/api/user";
 import { toast } from "sonner";
 
 export default function ResetPasswordPage() {
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return null;
-  }
-
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
-
   const [newPassword, setNewPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
 
