@@ -20,7 +20,7 @@ jobs:
       OPENAI_API_KEY: ""
       ANTHROPIC_API_KEY: ""
       OLLAMA_BASE_URL: http://localhost:11434
-      ENCRYPTION_KEY: ""
+      ENCRYPTION_KEY: P8D_OWN_U4xHXwD_yuKjC1QDe0j2Bbfwhr427rQcOG8=
       SUPABASE_URL: ""
       SUPABASE_SERVICE_ROLE_KEY: ""
       GOOGLE_CLIENT_ID: ""
