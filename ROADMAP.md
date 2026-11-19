@@ -2,7 +2,8 @@
 
 **Target rating: 85+/100**  
 **Current harsh rating (Phases 0, 1, 2, 3, 5 complete; Phase 4 NOT yet built): ~52/100**  
-**Gap to close: ~33 points via the phases below.**  
+**Gap to close: ~33 points via the phases below.**
+
 > _Baseline updated: Phase 0 (+8 pts) brings ~44 → ~52 per roadmap. Phases 1 (+12), 2 (+8), 3 (+10), and 5 (+8) are complete per your latest work; Phase 4 (+10) is next._
 
 This roadmap is the exact, ordered engineering plan to transform Proof from a prototype into an enterprise-grade, resume-worthy LLM evaluation framework. Every phase below has a **Definition of Done** and **Acceptance Criteria**. Do not start the next phase until the previous phase's Definition of Done is met.
@@ -257,7 +258,7 @@ _Goal: No more mock data; the dashboard hits the real API end-to-end._
   - Request/response types in `frontend/src/types/` matching backend Pydantic/SQLModel schemas.
   - React Query (`@tanstack/react-query`) with cache invalidation, retry, and optimistic updates.
 
-- [ ] **Real-time run status**
+- [] **Real-time run status**
   - Polling or WebSocket/SSE for run status (`Pending` → `Running` → `Completed`/`Failed`).
   - Progress bar: `completed_items / total_items`.
 

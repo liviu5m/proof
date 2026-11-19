@@ -1,6 +1,6 @@
 import httpx
 from src.models import Users
-from config import settings
+from src.config import settings
 
 BREVO_API_KEY = settings.BREVO_API_KEY
 FROM_EMAIL = settings.FROM_EMAIL or "proofaiapp@gmail.com"
