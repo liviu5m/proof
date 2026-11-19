@@ -21,8 +21,8 @@ jobs:
       ANTHROPIC_API_KEY: ""
       OLLAMA_BASE_URL: http://localhost:11434
       ENCRYPTION_KEY: P8D_OWN_U4xHXwD_yuKjC1QDe0j2Bbfwhr427rQcOG8=
-      SUPABASE_URL: ""
-      SUPABASE_SERVICE_ROLE_KEY: ""
+      SUPABASE_URL: https://dummy.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: dummy-service-role-key
       GOOGLE_CLIENT_ID: ""
       GOOGLE_CLIENT_SECRET: ""
       FRONTEND_URL: http://localhost:3000
