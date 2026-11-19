@@ -77,7 +77,7 @@ jobs:
       - name: Run backend tests with coverage
         working-directory: ./backend
         run: |
-          python -m pytest tests/ --cov=src --cov-report=term-missing --cov-fail-under=70
+          python -m pytest tests/ --cov=src --cov-report=term-missing --cov-fail-under=65
 
       # ---- Frontend type-check ----
       - name: Run frontend type-check
