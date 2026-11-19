@@ -37,7 +37,7 @@ jobs:
       - name: Install frontend dependencies
         working-directory: ./frontend
         run: |
-          npm ci
+          npm ci --legacy-peer-deps
 
       # ---- Backend lint ----
       - name: Run backend lint (ruff)
