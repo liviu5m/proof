@@ -9,6 +9,27 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: test-key
+      DATABASE_URL: sqlite:///./test.db
+      SECRET_KEY: test-secret-key
+      ENVIRONMENT: testing
+      LOG_LEVEL: DEBUG
+      MAX_CONCURRENT_RUNS: 5
+      REDIS_URL: redis://localhost:6379/0
+      OPENAI_API_KEY: ""
+      ANTHROPIC_API_KEY: ""
+      OLLAMA_BASE_URL: http://localhost:11434
+      ENCRYPTION_KEY: ""
+      SUPABASE_URL: ""
+      SUPABASE_SERVICE_ROLE_KEY: ""
+      GOOGLE_CLIENT_ID: ""
+      GOOGLE_CLIENT_SECRET: ""
+      FRONTEND_URL: http://localhost:3000
+      REDIRECT_URI: http://localhost:3000/auth/callback
+      RESEND_API_KEY: ""
+      BREVO_API_KEY: ""
+      FROM_EMAIL: noreply@localhost
     strategy:
       matrix:
         python-version: ["3.11"]
