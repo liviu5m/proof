@@ -18,6 +18,16 @@ import { resendVerification } from "@/api/user";
 import { toast } from "sonner";
 
 export default function VerifyEmailSentPage() {
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") || "";

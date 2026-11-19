@@ -66,7 +66,7 @@ function LoginForm() {
         error?.message ||
         "An unexpected error occurred";
       if (error?.response?.status === 403) {
-        resend({ email });
+        resendVerification({ email });
         router.push(`/auth/verify-email-sent?email=${encodeURIComponent(email)}`);
         return;
       }

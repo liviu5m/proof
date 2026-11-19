@@ -127,3 +127,8 @@ httpx2==2.16.0
 jiter==0.19.0
 openai==3.51.0
 truststore==0.10.5
+ruff
+mypy
+bandit
+black
+isort

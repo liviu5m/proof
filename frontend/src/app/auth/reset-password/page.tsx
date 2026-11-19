@@ -20,6 +20,16 @@ import { resetPassword } from "@/api/user";
 import { toast } from "sonner";
 
 export default function ResetPasswordPage() {
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";

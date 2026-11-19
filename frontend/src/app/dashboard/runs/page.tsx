@@ -19,6 +19,7 @@ import { getRuns } from "@/api/run";
 import { Result, Run } from "@/types";
 import Loader from "@/components/Loader";
 import { format, parseISO } from "date-fns";
+import { toast } from "sonner";
 
 export default function RunsPage() {
   const [selectedRun, setSelectedRun] = useState<any | null>(null);

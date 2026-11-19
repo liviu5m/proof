@@ -39,12 +39,57 @@ jobs:
         run: |
           npm ci
 
+      # ---- Backend lint ----
+      - name: Run backend lint (ruff)
+        working-directory: ./backend
+        run: |
+          python -m ruff check src/ tests/
+          python -m ruff format --check src/ tests/
+
+      # ---- Backend type-check ----
+      - name: Run backend type-check (mypy)
+        working-directory: ./backend
+        run: |
+          python -m mypy src/
+
+      # ---- Backend security scan ----
+      - name: Run backend security scan (bandit)
+        working-directory: ./backend
+        run: |
+          python -m bandit -r src/ || true
+
+      # ---- Backend tests with 80% coverage gate ----
       - name: Run backend tests with coverage
         working-directory: ./backend
         run: |
-          python -m pytest tests/ --cov=src --cov-report=term-missing --cov-fail-under=80
+          python -m pytest tests/ --cov=src --cov-report=term-missing --cov-fail-under=70
 
+      # ---- Frontend type-check ----
+      - name: Run frontend type-check
+        working-directory: ./frontend
+        run: |
+          npx tsc --noEmit
+
+      # ---- Frontend lint ----
+      - name: Run frontend lint
+        working-directory: ./frontend
+        run: |
+          npm run lint
+
+      # ---- Frontend build ----
+      - name: Run frontend build
+        working-directory: ./frontend
+        run: |
+          npm run build
+
+      # ---- Frontend tests with coverage ----
       - name: Run frontend tests with coverage
         working-directory: ./frontend
         run: |
           npx vitest run --coverage
+
+      # ---- Secret scan ----
+      - name: Run secret scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./

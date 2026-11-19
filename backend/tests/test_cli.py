@@ -126,7 +126,7 @@ class TestCliRun:
         finally:
             os.unlink(csv_path)
 
-    @patch("src.cli.genai.Client")
+    @patch("src.llm.providers.genai.Client")
     def test_run_with_mocked_llm(self, mock_genai_client):
         mock_client = MagicMock()
         mock_interaction = MagicMock()
