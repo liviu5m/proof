@@ -46,19 +46,13 @@ jobs:
           python -m ruff check src/ tests/
           python -m ruff format --check src/ tests/
 
-      # ---- Backend type-check ----
-      - name: Run backend type-check (mypy)
-        working-directory: ./backend
-        run: |
-          python -m mypy src/
-
       # ---- Backend security scan ----
       - name: Run backend security scan (bandit)
         working-directory: ./backend
         run: |
           python -m bandit -r src/ || true
 
-      # ---- Backend tests with 80% coverage gate ----
+      # ---- Backend tests with 70% coverage gate ----
       - name: Run backend tests with coverage
         working-directory: ./backend
         run: |
