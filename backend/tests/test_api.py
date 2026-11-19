@@ -198,7 +198,7 @@ class TestHealthEndpoints:
 
 
 class TestDatasetSuccessPaths:
-    @patch("src.db.supabase", new_callable=MagicMock)
+    @patch("src.routes.datasets.supabase", new_callable=MagicMock)
     def test_create_dataset_with_file_upload(self, mock_supabase, authed_client):
         mock_storage = MagicMock()
         mock_from_ = MagicMock()
@@ -216,7 +216,7 @@ class TestDatasetSuccessPaths:
         )
         assert response.status_code in [200, 201, 400, 401, 403, 500]
 
-    @patch("src.db.supabase", new_callable=MagicMock)
+    @patch("src.routes.datasets.supabase", new_callable=MagicMock)
     def test_get_dataset_with_data(self, mock_supabase, authed_client):
         mock_storage = MagicMock()
         mock_from_ = MagicMock()
@@ -229,7 +229,7 @@ class TestDatasetSuccessPaths:
         response = authed_client.get("/api/dataset/1")
         assert response.status_code in [200, 401, 403, 404, 500]
 
-    @patch("src.db.supabase", new_callable=MagicMock)
+    @patch("src.routes.datasets.supabase", new_callable=MagicMock)
     def test_delete_dataset_with_data(self, mock_supabase, authed_client):
         mock_storage = MagicMock()
         mock_from_ = MagicMock()
@@ -241,7 +241,7 @@ class TestDatasetSuccessPaths:
 
 
 class TestRunsSuccessPaths:
-    @patch("src.db.supabase", new_callable=MagicMock)
+    @patch("src.routes.runs.supabase", new_callable=MagicMock)
     def test_create_run_with_existing_dataset(self, mock_supabase, authed_client):
         mock_storage = MagicMock()
         mock_from_ = MagicMock()
