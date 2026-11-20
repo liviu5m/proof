@@ -58,20 +58,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to staging
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Deploy to Vercel Staging
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          echo "Deploying backend:${{ github.sha }} and frontend:${{ github.sha }} to staging"
-          # TODO: replace with your actual deploy command (ssh, fly deploy, render CLI, railway up, etc.)
+          vercel deploy --token=${VERCEL_TOKEN} --scope=${VERCEL_ORG_ID} --yes
 
       - name: Health-check gate (staging)
         run: |
-          # Wait for the deployment to become healthy, e.g.:
-          # for i in {1..30}; do
-          #   curl -sf https://staging.yourdomain.com/healthz && exit 0
-          #   sleep 10
-          # done
-          # exit 1
-          echo "Health-check gate not yet configured — add your staging URL and curl /healthz"
+          echo "Waiting for staging deployment to be healthy..."
+          for i in {1..30}; do
+            if curl -sf https://${{ secrets.VERCEL_STAGING_URL }}/healthz >/dev/null; then
+              echo "Staging healthy!"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Health check failed"
+          exit 1
 
   deploy-production:
     needs: build-and-push
@@ -82,12 +91,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to production
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Deploy to Vercel Production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          echo "Deploying backend:${{ github.sha }} and frontend:${{ github.sha }} to production"
-          # TODO: replace with your actual deploy command
+          vercel deploy --prod --token=${VERCEL_TOKEN} --scope=${VERCEL_ORG_ID} --yes
 
       - name: Health-check gate (production)
         run: |
-          # Same pattern as staging but for production URL
-          echo "Health-check gate not yet configured — add your production URL and curl /readyz"
+          echo "Waiting for production deployment to be healthy..."
+          for i in {1..30}; do
+            if curl -sf https://${{ secrets.VERCEL_PRODUCTION_URL }}/readyz >/dev/null; then
+              echo "Production healthy!"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Health check failed"
+          exit 1
