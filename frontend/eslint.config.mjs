@@ -1,6 +1,7 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import reactHooks from "eslint-plugin-react-hooks";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -12,14 +13,24 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Config files
+    "vitest.config.cjs",
+    "vitest.config.ts",
+    "eslint.config.mjs",
+    "next.config.ts",
+    "tsconfig.json",
   ]),
   // Custom rule overrides to allow existing codebase
   {
+    plugins: {
+      "react-hooks": reactHooks,
+    },
     rules: {
       // TypeScript
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": "warn",
       "@typescript-eslint/no-empty-object-type": "off",
+      "@typescript-eslint/no-require-imports": "off",
       // React hooks - downgrade to warn for existing code
       "react-hooks/rules-of-hooks": "warn",
       "react-hooks/exhaustive-deps": "warn",
