@@ -31,3 +31,11 @@ unfixable = ["B008", "BLE001", "E722", "S110", "E501"]
 
 [tool.ruff.format]
 
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+strict_optional = true
+

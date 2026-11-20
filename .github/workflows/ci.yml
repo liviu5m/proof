@@ -73,6 +73,12 @@ jobs:
         run: |
           python -m bandit -r src/ || true
 
+      # ---- Backend type-check (mypy) ----
+      - name: Run backend type-check (mypy)
+        working-directory: ./backend
+        run: |
+          python -m mypy src/
+
       # ---- Backend tests with 70% coverage gate ----
       - name: Run backend tests with coverage
         working-directory: ./backend
