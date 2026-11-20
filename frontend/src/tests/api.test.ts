@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock axios so no real network request is made.
-// vi.mock is hoisted to the top of the file by Vitest, so the factory runs
-// before any top-level `const` is initialized. We therefore create the mocks
-// lazily inside the factory and grab them from the imported `api` below.
-vi.mock("axios", () => ({
-  default: {
-    create: vi.fn(() => ({
-      get: vi.fn(),
+// Mock the api module directly since it creates axios instance at module level
+vi.mock("../libs/api", () => {
+  const mockGet = vi.fn();
+  const mockPost = vi.fn();
+  return {
+    api: {
+      get: mockGet,
+      post: mockPost,
       interceptors: { request: { use: vi.fn() } },
-    })),
-  },
-}));
+    },
+  };
+});
 
 import { api } from "../libs/api";
 

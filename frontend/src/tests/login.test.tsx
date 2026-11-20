@@ -74,7 +74,9 @@ describe("LoginPage", () => {
       });
     });
 
-    expect(mockPush).toHaveBeenCalledWith("/dashboard/datasets");
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith("/dashboard/datasets");
+    });
   });
 
   it("disables sign in button while loading", async () => {

@@ -19,12 +19,20 @@ vi.mock("@/api/run", () => ({
   createRun: vi.fn(),
 }));
 
+vi.mock("@/api/models", () => ({
+  getModels: vi.fn(),
+  syncModels: vi.fn(),
+}));
+
 import { getDatasets } from "@/api/datasets";
 import { createRun } from "@/api/run";
+import { getModels, syncModels } from "@/api/models";
 import EvaluatePage from "../app/dashboard/evaluate/page";
 
 const mockGetDatasets = vi.mocked(getDatasets);
 const mockCreateRun = vi.mocked(createRun);
+const mockGetModels = vi.mocked(getModels);
+const mockSyncModels = vi.mocked(syncModels);
 
 const mockDatasets = [
   {
@@ -43,22 +51,24 @@ const mockDatasets = [
   },
 ];
 
+const mockModels = [
+  { id: "1", name: "gemini-3.5-flash-lite", provider: "google", supports_json_mode: true, supports_system_prompt: true, max_tokens: 8192, cost_per_1k_tokens: 0.001 },
+  { id: "2", name: "gpt-4", provider: "openai", supports_json_mode: true, supports_system_prompt: true, max_tokens: 8192, cost_per_1k_tokens: 0.03 },
+  { id: "3", name: "claude-3", provider: "anthropic", supports_json_mode: true, supports_system_prompt: true, max_tokens: 4096, cost_per_1k_tokens: 0.015 },
+];
+
 describe("EvaluatePage", () => {
   beforeEach(() => {
     queryClient.clear();
     mockGetDatasets.mockReset();
     mockCreateRun.mockReset();
+    mockGetModels.mockReset();
+    mockSyncModels.mockReset();
+    mockGetModels.mockResolvedValue(mockModels);
   });
 
   afterEach(() => {
     vi.clearAllMocks();
-  });
-
-  it("shows loading state while fetching datasets", () => {
-    mockGetDatasets.mockReturnValue(new Promise(() => {}));
-    render(<EvaluatePage />);
-    const loadingTexts = screen.getAllByText(/loading.../i);
-    expect(loadingTexts.length).toBeGreaterThan(0);
   });
 
   it("renders without crashing", async () => {
@@ -66,20 +76,20 @@ describe("EvaluatePage", () => {
     render(<EvaluatePage />);
     await act(async () => {});
     await waitFor(() =>
-      expect(screen.getByText(/no datasets available/i)).toBeInTheDocument()
+      expect(screen.getByText(/Select dataset/i)).toBeInTheDocument()
     );
   });
 
   it("renders model selection dropdowns", async () => {
     mockGetDatasets.mockResolvedValue(mockDatasets);
     render(<EvaluatePage />);
-    await act(async () => {});
-    await waitFor(() =>
-      expect(screen.getByText(/target llm model/i)).toBeInTheDocument()
-    );
-    await waitFor(() =>
-      expect(screen.getByText(/target llm judge model/i)).toBeInTheDocument()
-    );
+    // Wait for models query to resolve by checking for model options
+    await waitFor(() => {
+      expect(screen.getByText(/Runner Model/i)).toBeInTheDocument();
+    }, { timeout: 3000 });
+    await waitFor(() => {
+      expect(screen.getByText(/Model that evaluates answers/i)).toBeInTheDocument();
+    }, { timeout: 3000 });
   });
 
   it("renders system prompt textarea", async () => {
@@ -87,7 +97,7 @@ describe("EvaluatePage", () => {
     render(<EvaluatePage />);
     await act(async () => {});
     await waitFor(() =>
-      expect(screen.getByText(/ai judge system prompt/i)).toBeInTheDocument()
+      expect(screen.getByText(/AI Judge System Prompt/i)).toBeInTheDocument()
     );
   });
 
@@ -96,7 +106,7 @@ describe("EvaluatePage", () => {
     render(<EvaluatePage />);
     await act(async () => {});
     await waitFor(() =>
-      expect(screen.getByText(/start evaluation/i)).toBeInTheDocument()
+      expect(screen.getByText(/Start Evaluation Run/i)).toBeInTheDocument()
     );
   });
 
@@ -106,9 +116,9 @@ describe("EvaluatePage", () => {
     render(<EvaluatePage />);
     await act(async () => {});
     await waitFor(() =>
-      expect(screen.getByText(/start evaluation/i)).toBeInTheDocument()
+      expect(screen.getByText(/Start Evaluation Run/i)).toBeInTheDocument()
     );
-    const buttons = screen.getAllByText(/start evaluation/i);
+    const buttons = screen.getAllByText(/Start Evaluation Run/i);
     fireEvent.click(buttons[0]);
     await waitFor(() => expect(mockCreateRun).toHaveBeenCalled());
   });

@@ -78,7 +78,9 @@ describe("SignupPage", () => {
       });
     });
 
-    expect(mockPush).toHaveBeenCalledWith("/auth/login");
+    expect(mockPush).toHaveBeenCalledWith(
+      "/auth/verify-email-sent?email=user%40example.com"
+    );
   });
 
   it("disables create account button while loading", async () => {
