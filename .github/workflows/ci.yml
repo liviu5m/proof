@@ -103,7 +103,7 @@ jobs:
         run: |
           npx vitest run --coverage
 
-       ---- Secret scan ----
+      # ---- Secret scan ----
       - name: Run secret scan
         uses: trufflesecurity/trufflehog@main
         with:
