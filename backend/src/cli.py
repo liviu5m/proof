@@ -496,8 +496,9 @@ def run_list(
     limit: int = typer.Option(20, "--limit", "-l"),
 ):
     from sqlalchemy import desc
-    from .db import SessionDep
-    from fastapi import Depends
+    from sqlmodel import Session
+
+    from .db import _get_engine
 
     # Note: This function needs a session - using the pattern from other commands
     engine = _get_engine()

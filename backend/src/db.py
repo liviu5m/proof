@@ -4,7 +4,7 @@ from typing import Annotated
 from dotenv import load_dotenv
 from fastapi import Depends
 from sqlalchemy.exc import OperationalError
-from sqlmodel import Session, SQLModel, create_engine, text
+from sqlmodel import Session, SQLModel, create_engine
 from supabase import Client, create_client
 from tenacity import (
     retry,
@@ -81,6 +81,7 @@ def check_db_connection() -> bool:
     try:
         with Session(_get_engine()) as session:
             from sqlalchemy import text
+
             session.exec(text("SELECT 1"))  # type: ignore[call-overload]
         return True
     except Exception:

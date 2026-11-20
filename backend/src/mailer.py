@@ -1,5 +1,6 @@
-import httpx
 from typing import Any
+
+import httpx
 
 from src.config import settings
 from src.models import Users
