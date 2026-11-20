@@ -53,6 +53,9 @@ class _SlidingWindow:
             except Exception:
                 pass
 
+        # Allow if Redis unavailable or error
+        return True, None
+
 
 _limiter_runs = _SlidingWindow(settings.RATE_LIMIT_RUNS_PER_MIN, 60)
 _limiter_datasets = _SlidingWindow(settings.RATE_LIMIT_DATASETS_PER_MIN, 60)

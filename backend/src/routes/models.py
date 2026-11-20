@@ -70,7 +70,7 @@ async def sync_models(
 
         try:
             async with httpx.AsyncClient(timeout=30) as http:
-                headers = {}
+                headers: dict[str, str] = {}
 
                 # Provider-specific auth
                 if provider == "google":

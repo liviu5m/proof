@@ -1,4 +1,5 @@
 import httpx
+from typing import Any
 
 from src.config import settings
 from src.models import Users
@@ -84,7 +85,7 @@ def _send_email(
     to_email: str,
     subject: str,
     html_body: str,
-) -> dict:
+) -> dict[str, Any]:
     """Send email via Brevo API."""
     url = "https://api.brevo.com/v3/smtp/email"
     headers = {
@@ -102,7 +103,7 @@ def _send_email(
     response = httpx.post(url, json=payload, headers=headers, timeout=10.0)
     if response.status_code >= 400:
         raise Exception(f"Brevo API error: {response.status_code} - {response.text}")
-    return response.json()
+    return response.json()  # type: ignore[no-any-return]
 
 
 async def send_email_verification(user: Users, token: str) -> dict:

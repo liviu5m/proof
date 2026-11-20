@@ -241,5 +241,5 @@ def verify_csrf(request: Request):
 
     if origin and origin != allowed:
         raise HTTPException(status_code=403, detail="Invalid origin")
-    if referer and not referer.startswith(allowed):
+    if referer and allowed and not referer.startswith(allowed):
         raise HTTPException(status_code=403, detail="Invalid referer")

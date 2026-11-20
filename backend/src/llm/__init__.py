@@ -6,7 +6,7 @@ from .providers import (
     OpenAIProvider,
 )
 
-PROVIDERS = {
+PROVIDERS: dict[str, type[LLMProvider]] = {
     "google": GoogleGenAIProvider,
     "openai": OpenAIProvider,
     "anthropic": AnthropicProvider,

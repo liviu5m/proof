@@ -12,18 +12,18 @@ try:
     from google import genai
     from google.genai import errors as genai_errors
 except ImportError:
-    genai = None
-    genai_errors = None
+    genai = None  # type: ignore[assignment,misc]
+    genai_errors = None  # type: ignore[assignment,misc]
 
 try:
     from openai import AsyncOpenAI
 except ImportError:
-    AsyncOpenAI = None
+    AsyncOpenAI = None  # type: ignore[assignment,misc]
 
 try:
     from anthropic import AsyncAnthropic
 except ImportError:
-    AsyncAnthropic = None
+    AsyncAnthropic = None  # type: ignore[assignment,misc]
 
 RETRYABLE_CODES = {429, 500, 502, 503, 504}
 

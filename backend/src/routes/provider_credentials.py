@@ -40,7 +40,7 @@ def list_credentials(
     creds = session.exec(stmt).all()
     return [
         ProviderCredentialResponse(
-            id=c.id,
+            id=c.id,  # type: ignore[arg-type]
             provider=c.provider,
             base_url=c.base_url,
             is_active=c.is_active,
@@ -80,8 +80,9 @@ def upsert_credential(
         session.refresh(existing)
         cred = existing
     else:
+        assert user.id is not None, "User ID should not be None for authenticated user"
         cred = ProviderCredential(
-            user_id=user.id,
+            user_id=user.id,  # type: ignore[arg-type]
             provider=provider,
             encrypted_api_key=encrypted_key,
             base_url=data.base_url,
@@ -90,8 +91,9 @@ def upsert_credential(
         session.commit()
         session.refresh(cred)
 
+    assert cred.id is not None, "Credential ID should not be None after commit"
     return ProviderCredentialResponse(
-        id=cred.id,
+        id=cred.id,  # type: ignore[arg-type]
         provider=cred.provider,
         base_url=cred.base_url,
         is_active=cred.is_active,

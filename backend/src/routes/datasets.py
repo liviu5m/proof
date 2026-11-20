@@ -68,7 +68,7 @@ async def createDataset(
     reader = csv.DictReader(csv_file)
     rows = list(reader)
 
-    header_errors = validate_csv_headers(reader.fieldnames or [])
+    header_errors = validate_csv_headers(list(reader.fieldnames or []))
     if header_errors:
         raise HTTPException(
             status_code=400, detail={"errors": header_errors, "code": "invalid_headers"}
@@ -92,12 +92,13 @@ async def createDataset(
         file_options={"content-type": "text/csv", "upsert": "true"},
     )
 
+    assert user.id is not None, "User ID should not be None for authenticated user"
     dataset = Datasets(
         name=name,
         source_path=file_path,
         item_count=item_count,
         hash=file_hash,
-        user_id=user.id,
+        user_id=user.id,  # type: ignore[arg-type]
     )
     session.add(dataset)
     session.commit()
@@ -118,7 +119,7 @@ async def getDatasets(
         .where(Datasets.deleted_at is None)
     )
     if searchQuery:
-        stmt = stmt.where(Datasets.name.ilike(f"%{searchQuery}%"))
+        stmt = stmt.where(Datasets.name.ilike(f"%{searchQuery}%"))  # type: ignore[attr-defined]
     datasets = session.exec(stmt).all()
     return [d.model_dump() for d in datasets]
 

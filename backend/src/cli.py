@@ -54,6 +54,7 @@ def run(
         "-pr",
         help="LLM provider: google, openai, anthropic, ollama",
     ),
+    # provider variable will be reassigned to LLMProvider instance
     ollama_base_url: str = typer.Option(
         "http://localhost:11434",
         "--ollama-base-url",
@@ -76,12 +77,13 @@ def run(
             session.commit()
         else:
             dataset = datasets[0]
-        provider = get_llm_provider(provider, ollama_base_url=ollama_base_url)
+        provider_str: str = provider
+        llm_provider = get_llm_provider(provider_str, ollama_base_url=ollama_base_url)
         rows = load_dataset(questions)
         dataset.item_count = len(rows)
         session.commit()
-        data = asyncio.run(run_tests(rows, prompt, model, provider))
-        scores = asyncio.run(judge_questions(data, judge_modal, provider))
+        data = asyncio.run(run_tests(rows, prompt, model, llm_provider))
+        scores = asyncio.run(judge_questions(data, judge_modal, llm_provider))
         avg = 0
         if scores:
             avg = sum(s["score"] for s in scores if s.get("score") is not None) / len(
@@ -99,18 +101,19 @@ def run(
             judge_model=judge_modal,
             avg_score=avg,
             total=len(data),
-            provider=provider.provider_name,
-            provider_judge=provider.provider_name,
+            provider=llm_provider.provider_name,
+            provider_judge=llm_provider.provider_name,
         )
         session.add(run_obj)
         session.commit()
         session.refresh(run_obj)
 
+        assert run_obj.id is not None, "Run ID should not be None after commit"
         for idx, (row, result, score) in enumerate(
             zip(rows, data, scores, strict=False)
         ):
             res = Results(
-                run_id=run_obj.id,
+                run_id=run_obj.id,  # type: ignore[arg-type]
                 idx=idx,
                 question=row["input"],
                 expected=row.get("expected"),
@@ -149,10 +152,10 @@ def compare(
             typer.echo("Warning: Runs are from different datasets", err=True)
 
         results_a = session.exec(
-            select(Results).where(Results.run_id == run_a).order_by(Results.idx)
+            select(Results).where(Results.run_id == run_a).order_by(Results.idx)  # type: ignore[arg-type]
         ).all()
         results_b = session.exec(
-            select(Results).where(Results.run_id == run_b).order_by(Results.idx)
+            select(Results).where(Results.run_id == run_b).order_by(Results.idx)  # type: ignore[arg-type]
         ).all()
 
         results_a_by_idx = {r.idx: r for r in results_a}
@@ -305,7 +308,7 @@ def compare(
                 f"╭─ Question #{idx + 1} "
                 "────────────────────────────────────────────────────────────╮"
             )
-            question_text = ra.question if ra else rb.question
+            question_text = ra.question if ra else (rb.question if rb else "")
             typer.echo(f"│ {question_text}")
             typer.echo("╰" + "─" * 76 + "╯")
             typer.echo("")
@@ -492,8 +495,14 @@ def run_list(
     dataset_id: int = typer.Option(None, "--dataset", "-d"),
     limit: int = typer.Option(20, "--limit", "-l"),
 ):
-    with Session(_get_engine()) as session:
-        query = select(Runs).order_by(Runs.created_at.desc())
+    from sqlalchemy import desc
+    from .db import SessionDep
+    from fastapi import Depends
+
+    # Note: This function needs a session - using the pattern from other commands
+    engine = _get_engine()
+    with Session(engine) as session:
+        query = select(Runs).order_by(desc(Runs.created_at))  # type: ignore[arg-type]
         if dataset_id:
             query = query.where(Runs.dataset_id == dataset_id)
         runs = session.exec(query.limit(limit)).all()
@@ -519,7 +528,7 @@ def run_show(
         results = session.exec(
             select(Results)
             .where(Results.run_id == run_id)
-            .order_by(Results.idx)
+            .order_by(Results.idx)  # type: ignore[arg-type]
             .limit(limit)
         ).all()
 

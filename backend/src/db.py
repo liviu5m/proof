@@ -80,7 +80,8 @@ def init_db():
 def check_db_connection() -> bool:
     try:
         with Session(_get_engine()) as session:
-            session.exec(text("SELECT 1"))
+            from sqlalchemy import text
+            session.exec(text("SELECT 1"))  # type: ignore[call-overload]
         return True
     except Exception:
         return False

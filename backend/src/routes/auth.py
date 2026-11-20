@@ -64,6 +64,7 @@ async def login(data: LoginData, session: SessionDep, response: Response):
                 detail="Email not verified. Please verify your email before logging in.",
             )
 
+        assert user.id is not None, "User ID should not be None for existing user"
         jwt = createAccessToken(
             data={
                 "id": user.id,
@@ -74,7 +75,7 @@ async def login(data: LoginData, session: SessionDep, response: Response):
         )
         refresh_plain = create_token()
         refresh_token_row = RefreshTokens(
-            user_id=user.id,
+            user_id=user.id,  # type: ignore[arg-type]
             token_hash=hash_token(refresh_plain),
             expires_at=datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
             revoked=False,
@@ -135,9 +136,10 @@ async def register(
     session.add(user)
     session.commit()
     session.refresh(user)
+    assert user.id is not None, "User ID should not be None after commit"
     token = create_token()
     email_verification = EmailVerifications(
-        user_id=user.id,
+        user_id=user.id,  # type: ignore[arg-type]
         token_hash=hash_token(token),
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
     )
@@ -173,9 +175,10 @@ async def resend(
         raise HTTPException(status_code=404, detail="User not found")
     if user.verified:
         raise HTTPException(status_code=400, detail="Email already verified")
+    assert user.id is not None, "User ID should not be None for existing user"
     token = create_token()
     email_verification = EmailVerifications(
-        user_id=user.id,
+        user_id=user.id,  # type: ignore[arg-type]
         token_hash=hash_token(token),
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
     )
@@ -198,9 +201,10 @@ async def request_password_reset(
     if not user:
         return {"message": "If the email exists, a reset link has been sent"}
 
+    assert user.id is not None, "User ID should not be None for existing user"
     token = create_token()
     reset_token = PasswordResetTokens(
-        user_id=user.id,
+        user_id=user.id,  # type: ignore[arg-type]
         token_hash=hash_token(token),
         expires_at=datetime.now(UTC) + timedelta(minutes=30),
     )
@@ -304,6 +308,7 @@ def google_callback(code: str, session: SessionDep, response: Response):
         session.add(userFinal)
         session.commit()
         session.refresh(userFinal)
+    assert userFinal.id is not None, "User ID should not be None for existing user"
 
     jwt = createAccessToken(
         data={
@@ -315,7 +320,7 @@ def google_callback(code: str, session: SessionDep, response: Response):
     )
     refresh_plain = create_token()
     refresh_token_row = RefreshTokens(
-        user_id=userFinal.id,
+        user_id=userFinal.id,  # type: ignore[arg-type]
         token_hash=hash_token(refresh_plain),
         expires_at=datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
         revoked=False,
@@ -412,6 +417,7 @@ async def getRefreshToken(request: Request, response: Response, session: Session
             detail="User not found",
         )
 
+    assert user.id is not None, "User ID should not be None for existing user"
     # Revoke old token and create new one (rotation)
     rt.revoked = True
     session.add(rt)
@@ -419,7 +425,7 @@ async def getRefreshToken(request: Request, response: Response, session: Session
     new_plain = create_token()
     new_hash = hash_token(new_plain)
     new_rt = RefreshTokens(
-        user_id=user.id,
+        user_id=user.id,  # type: ignore[arg-type]
         token_hash=new_hash,
         expires_at=datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
         revoked=False,

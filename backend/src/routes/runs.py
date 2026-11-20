@@ -82,7 +82,7 @@ async def createRun(
             detail={"error": "Dataset is empty", "code": "empty_dataset"},
         )
 
-    header_errors = validate_csv_headers(reader.fieldnames or [])
+    header_errors = validate_csv_headers(list(reader.fieldnames or []))
     if header_errors:
         raise HTTPException(
             status_code=400, detail={"errors": header_errors, "code": "invalid_headers"}
@@ -133,11 +133,12 @@ async def createRun(
     session.commit()
     session.refresh(run)
 
+    assert run.id is not None, "Run ID should not be None after commit"
     for idx, (row, result, score) in enumerate(
         zip(valid_rows, data, scores, strict=False)
     ):
         res = Results(
-            run_id=run.id,
+            run_id=run.id,  # type: ignore[arg-type]
             idx=idx,
             question=row.input,
             expected=row.expected,
@@ -176,12 +177,12 @@ async def getRuns(
 
         runs_stmt = runs_stmt.where(
             or_(
-                Datasets.name.ilike(f"%{search}%"),
-                Runs.model.ilike(f"%{search}%"),
+                Datasets.name.ilike(f"%{search}%"),  # type: ignore[attr-defined]
+                Runs.model.ilike(f"%{search}%"),  # type: ignore[attr-defined]
                 cast(Runs.id, String).ilike(f"%{search}%"),
             )
         )
-    runs_stmt = runs_stmt.order_by(desc(Runs.created_at))
+    runs_stmt = runs_stmt.order_by(desc(Runs.created_at))  # type: ignore[arg-type]
     runs = session.exec(runs_stmt).all()
 
     response = []
@@ -189,7 +190,7 @@ async def getRuns(
         results_stmt = (
             select(Results)
             .where(Results.run_id == run.id, Results.deleted_at is None)
-            .order_by(Results.idx)
+            .order_by(Results.idx)  # type: ignore[arg-type]
         )
         results = session.exec(results_stmt).all()
 
@@ -233,7 +234,7 @@ async def get_run(
             Results.run_id == run.id,
             Results.deleted_at is None,
         )
-        .order_by(Results.idx)
+        .order_by(Results.idx)  # type: ignore[arg-type]
     )
     results = session.exec(results_stmt).all()
 

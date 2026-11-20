@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 
 from src.llm import LLMProvider
 
@@ -86,7 +87,7 @@ async def run_tests(questions, prompt, model, provider: LLMProvider):
     tasks = [run_single(q, prompt, model, provider, sem) for q in questions]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    normalized = []
+    normalized: list[dict[str, Any]] = []
     for r in results:
         if isinstance(r, Exception):
             normalized.append(
@@ -97,5 +98,5 @@ async def run_tests(questions, prompt, model, provider: LLMProvider):
                 }
             )
         else:
-            normalized.append(r)
+            normalized.append(r)  # type: ignore[arg-type]
     return normalized

@@ -1,5 +1,6 @@
 import asyncio
 import json
+from typing import Any
 
 from src.llm import LLMProvider
 from src.scorers import check_json, check_keywords, check_regex, check_word_count
@@ -194,7 +195,7 @@ async def judge_questions(data, model, provider: LLMProvider):
     tasks = [judge_single(q, model, provider, sem) for q in data]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    normalized = []
+    normalized: list[dict[str, Any]] = []
     for r in results:
         if isinstance(r, Exception):
             normalized.append(
@@ -205,5 +206,5 @@ async def judge_questions(data, model, provider: LLMProvider):
                 }
             )
         else:
-            normalized.append(r)
+            normalized.append(r)  # type: ignore[arg-type]
     return normalized

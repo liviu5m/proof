@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -25,9 +25,8 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str | None = "http://localhost:11434"
     ENCRYPTION_KEY: str | None = None
 
-    class Config:
-        env_file = ".env"
-        extra = "allow"
+    model_config = SettingsConfigDict(env_file=".env", extra="allow")
 
 
-settings = Settings()
+# Settings will be loaded from .env file via pydantic-settings
+settings = Settings()  # type: ignore[call-arg]
