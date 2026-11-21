@@ -61,13 +61,23 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
-      - name: Deploy to Vercel Staging
+      - name: Pull Vercel Environment
+        working-directory: ./frontend
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          vercel deploy --token=${VERCEL_TOKEN} --scope=${VERCEL_ORG_ID} --yes
+          vercel pull --environment=preview --token=${VERCEL_TOKEN} --scope=${VERCEL_ORG_ID} --project=${VERCEL_PROJECT_ID} --yes
+
+      - name: Deploy to Vercel Staging
+        working-directory: ./frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          vercel deploy --token=${VERCEL_TOKEN} --scope=${VERCEL_ORG_ID} --project=${VERCEL_PROJECT_ID} --yes
 
       - name: Health-check gate (staging)
         run: |
@@ -94,13 +104,23 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
-      - name: Deploy to Vercel Production
+      - name: Pull Vercel Environment
+        working-directory: ./frontend
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          vercel deploy --prod --token=${VERCEL_TOKEN} --scope=${VERCEL_ORG_ID} --yes
+          vercel pull --environment=production --token=${VERCEL_TOKEN} --scope=${VERCEL_ORG_ID} --project=${VERCEL_PROJECT_ID} --yes
+
+      - name: Deploy to Vercel Production
+        working-directory: ./frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          vercel deploy --prod --token=${VERCEL_TOKEN} --scope=${VERCEL_ORG_ID} --project=${VERCEL_PROJECT_ID} --yes
 
       - name: Health-check gate (production)
         run: |
