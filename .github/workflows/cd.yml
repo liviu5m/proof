@@ -62,7 +62,6 @@ jobs:
         run: npm install --global vercel@latest
 
       - name: Pull Vercel Environment
-        working-directory: ./frontend
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -71,7 +70,6 @@ jobs:
           vercel pull --environment=preview --token=${VERCEL_TOKEN} --scope=${VERCEL_ORG_ID} --project=${VERCEL_PROJECT_ID} --yes
 
       - name: Deploy to Vercel Staging
-        working-directory: ./frontend
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -105,7 +103,6 @@ jobs:
         run: npm install --global vercel@latest
 
       - name: Pull Vercel Environment
-        working-directory: ./frontend
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -114,7 +111,6 @@ jobs:
           vercel pull --environment=production --token=${VERCEL_TOKEN} --scope=${VERCEL_ORG_ID} --project=${VERCEL_PROJECT_ID} --yes
 
       - name: Deploy to Vercel Production
-        working-directory: ./frontend
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
