@@ -17,7 +17,12 @@ from sqlmodel import select
 
 from src.config import settings
 from src.db import SessionDep
-from src.models import ProofUserRole, Users
+from src.models import (
+    ProofUserRole,
+    PromptRegistry,
+    PromptVersion,
+    Users,
+)
 
 load_dotenv(verbose=True)
 SECRET_KEY = os.getenv("SECRET_KEY", "")
@@ -243,3 +248,55 @@ def verify_csrf(request: Request):
         raise HTTPException(status_code=403, detail="Invalid origin")
     if referer and allowed and not referer.startswith(allowed):
         raise HTTPException(status_code=403, detail="Invalid referer")
+
+
+
+
+
+def hash_content(content: str) -> str:
+    """SHA-256 content hash for immutable prompt versions."""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def get_registry_or_404(
+    session: SessionDep, registry_id: int, user: Users
+) -> PromptRegistry:
+    """Fetch a non-deleted registry, enforcing ownership."""
+    stmt = select(PromptRegistry).where(
+        PromptRegistry.id == registry_id,
+        PromptRegistry.deleted_at == None,  # noqa: E712
+    )
+    registry = session.exec(stmt).first()
+    if not registry:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "Registry not found", "code": "not_found"},
+        )
+    if user.role != ProofUserRole.ADMIN and registry.user_id != user.id:
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "Not your registry", "code": "forbidden"},
+        )
+    return registry
+
+
+def registry_out(session: SessionDep, registry: PromptRegistry) -> dict:
+    """Serialize a registry with its versions and current version."""
+    versions_stmt = select(PromptVersion).where(
+        PromptVersion.registry_id == registry.id,
+        PromptVersion.deleted_at == None,  # noqa: E712
+    )
+    versions = session.exec(versions_stmt).all()
+
+    current = next((v for v in versions if v.is_current), None)
+
+    return {
+        "id": registry.id,
+        "name": registry.name,
+        "description": registry.description,
+        "user_id": registry.user_id,
+        "current_version_id": current.id if current else None,
+        "version_count": len(versions),
+        "created_at": registry.created_at,
+        "updated_at": registry.updated_at,
+    }

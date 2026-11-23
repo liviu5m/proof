@@ -37,7 +37,8 @@ async def list_models(
             "supports_json_mode": m.supports_json_mode,
             "supports_system_prompt": m.supports_system_prompt,
             "max_tokens": m.max_tokens,
-            "cost_per_1k_tokens": m.cost_per_1k_tokens,
+            "input_cost_per_1m": float(m.input_cost_per_1m) if m.input_cost_per_1m else None,
+            "output_cost_per_1m": float(m.output_cost_per_1m) if m.output_cost_per_1m else None,
         }
         for m in models
     ]

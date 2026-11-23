@@ -116,7 +116,7 @@ async def getDatasets(
     stmt = (
         select(Datasets)
         .where(Datasets.user_id == user.id)
-        .where(Datasets.deleted_at is None)
+        .where(Datasets.deleted_at == None)
     )
     if searchQuery:
         stmt = stmt.where(Datasets.name.ilike(f"%{searchQuery}%"))  # type: ignore[attr-defined]
@@ -134,7 +134,7 @@ async def getDataset(
     stmt = (
         select(Datasets)
         .where(Datasets.id == dataset_id, Datasets.user_id == user.id)
-        .where(Datasets.deleted_at is None)
+        .where(Datasets.deleted_at == None)
     )
     dataset = session.exec(stmt).first()
     if dataset is None:
@@ -154,7 +154,7 @@ async def deleteDataset(
     stmt = select(Datasets).where(
         Datasets.id == dataset_id,
         Datasets.user_id == user.id,
-        Datasets.deleted_at is None,
+        Datasets.deleted_at == None,
     )
     dataset = session.exec(stmt).first()
     if dataset is None:
@@ -175,7 +175,7 @@ async def downloadDataset(
     stmt = (
         select(Datasets)
         .where(Datasets.id == dataset_id, Datasets.user_id == user.id)
-        .where(Datasets.deleted_at is None)
+        .where(Datasets.deleted_at == None)
     )
     dataset = session.exec(stmt).first()
     if dataset is None:

@@ -10,7 +10,7 @@ from sqlmodel import select
 from src.db import SessionDep, supabase
 from src.deps import get_llm_provider
 from src.judge import judge_questions
-from src.models import Datasets, ProofUserRole, Results, Runs, Users
+from src.models import Datasets, ProofUserRole, Results, Runs, TokenUsage, Users
 from src.rate_limit import check_concurrent_run, rate_limit_runs, release_concurrent_run
 from src.runner import run_tests
 from src.utils import (
@@ -39,6 +39,7 @@ class RunCreateRequest(BaseModel):
     judge_provider: str = "google"
     ollama_base_url: str | None = None
     ollama_base_url_judge: str | None = None
+    scorer_weights: dict | None = None
 
 
 @router.post("/")
@@ -102,19 +103,21 @@ async def createRun(
         user_id=user.id,
         session=session,
         ollama_base_url=payload.ollama_base_url,
+        model=payload.model,
     )
     provider_judge = get_llm_provider(
         provider=payload.judge_provider,
         user_id=user.id,
         session=session,
         ollama_base_url=payload.ollama_base_url_judge,
+        model=payload.judge_model,
     )
     try:
         rows_as_dicts = [r.model_dump() for r in valid_rows]
         data = await run_tests(
             rows_as_dicts, clean_system_prompt, payload.model, provider
         )
-        scores = await judge_questions(data, clean_judge_model, provider_judge)
+        scores = await judge_questions(data, clean_judge_model, provider_judge, payload.scorer_weights)
     finally:
         await release_concurrent_run(user.id)
     avg_score = sum(s["score"] for s in scores) / len(scores) if scores else 0.0
@@ -134,6 +137,44 @@ async def createRun(
     session.refresh(run)
 
     assert run.id is not None, "Run ID should not be None after commit"
+
+    # Aggregate token usage from runner + judge responses
+    all_responses = data + scores
+    total_prompt = sum(r.get("input_tokens", 0) or 0 for r in all_responses)
+    total_completion = sum(r.get("output_tokens", 0) or 0 for r in all_responses)
+    total_cost = sum(r.get("cost_usd", 0) or 0 for r in all_responses)
+    total_cached = sum(r.get("cached_tokens", 0) or 0 for r in all_responses)
+    total_reasoning = sum(r.get("reasoning_tokens", 0) or 0 for r in all_responses)
+    total_latency = sum(r.get("latency_s", 0.0) or 0.0 for r in all_responses)
+    total_attempts = sum(r.get("attempts", 0) or 0 for r in all_responses)
+    usage_estimated = any(r.get("usage_estimated") for r in all_responses)
+
+    # Get prices used (from first response that has them)
+    first_with_price = next(
+        (r for r in all_responses if r.get("input_cost_per_1m") is not None),
+        {}
+    )
+
+    from decimal import Decimal
+    token_usage = TokenUsage(
+        run_id=run.id,
+        model=payload.model,
+        provider=payload.provider,
+        prompt_tokens=total_prompt,
+        completion_tokens=total_completion,
+        cost_usd=Decimal(str(total_cost)) if total_cost else None,
+        input_cost_per_1m=Decimal(str(first_with_price.get("input_cost_per_1m"))) 
+                           if first_with_price.get("input_cost_per_1m") else None,
+        output_cost_per_1m=Decimal(str(first_with_price.get("output_cost_per_1m"))) 
+                            if first_with_price.get("output_cost_per_1m") else None,
+        cached_tokens=total_cached,
+        reasoning_tokens=total_reasoning,
+        total_latency_s=total_latency,
+        total_attempts=total_attempts,
+        usage_estimated=usage_estimated,
+    )
+    session.add(token_usage)
+
     for idx, (row, result, score) in enumerate(
         zip(valid_rows, data, scores, strict=False)
     ):
@@ -167,8 +208,8 @@ async def getRuns(
     runs_stmt = (
         select(Runs, Datasets.name)
         .join(Datasets)
-        .where(Datasets.deleted_at is None)
-        .where(Runs.deleted_at is None)
+        .where(Datasets.deleted_at == None)
+        .where(Runs.deleted_at == None)
     )
     if user.role != ProofUserRole.ADMIN:
         runs_stmt = runs_stmt.where(Datasets.user_id == user.id)
@@ -189,7 +230,7 @@ async def getRuns(
     for run, dataset_name in runs:
         results_stmt = (
             select(Results)
-            .where(Results.run_id == run.id, Results.deleted_at is None)
+            .where(Results.run_id == run.id, Results.deleted_at == None)
             .order_by(Results.idx)  # type: ignore[arg-type]
         )
         results = session.exec(results_stmt).all()
@@ -232,7 +273,7 @@ async def get_run(
         select(Results)
         .where(
             Results.run_id == run.id,
-            Results.deleted_at is None,
+            Results.deleted_at == None,
         )
         .order_by(Results.idx)  # type: ignore[arg-type]
     )
@@ -274,3 +315,41 @@ async def delete_run(
     session.add(run)
     session.commit()
     return {"success": "Run deleted"}
+
+
+@router.get("/{run_id}/cost")
+async def get_run_cost(
+    run_id: int,
+    session: SessionDep,
+    user: Users = Depends(get_current_user),
+    _: Users = Depends(require_viewer),
+):
+    """Get token usage and cost for a run."""
+    tu = session.exec(select(TokenUsage).where(TokenUsage.run_id == run_id)).first()
+    if not tu:
+        return {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "cost_usd": None,
+            "input_cost_per_1m": None,
+            "output_cost_per_1m": None,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0,
+            "total_latency_s": 0.0,
+            "total_attempts": 0,
+            "usage_estimated": False,
+            "pricing": "unknown",
+        }
+    return {
+        "prompt_tokens": tu.prompt_tokens,
+        "completion_tokens": tu.completion_tokens,
+        "cost_usd": float(tu.cost_usd) if tu.cost_usd is not None else None,
+        "input_cost_per_1m": float(tu.input_cost_per_1m) if tu.input_cost_per_1m else None,
+        "output_cost_per_1m": float(tu.output_cost_per_1m) if tu.output_cost_per_1m else None,
+        "cached_tokens": tu.cached_tokens,
+        "reasoning_tokens": tu.reasoning_tokens,
+        "total_latency_s": tu.total_latency_s,
+        "total_attempts": tu.total_attempts,
+        "usage_estimated": tu.usage_estimated,
+        "pricing": "estimated" if tu.cost_usd is not None else "unknown",
+    }

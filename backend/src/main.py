@@ -13,6 +13,7 @@ from src.db import check_db_connection
 from src.routes.auth import router as authRouter
 from src.routes.datasets import router as datasetsRouter
 from src.routes.models import router as modelsRouter
+from src.routes.prompts import router as promptsRouter
 from src.routes.provider_credentials import router as providerCredentialsRouter
 from src.routes.runs import router as runsRouter
 from src.routes.user import router as userRouter
@@ -140,6 +141,7 @@ app.include_router(datasetsRouter)
 app.include_router(runsRouter)
 app.include_router(providerCredentialsRouter)
 app.include_router(modelsRouter)
+app.include_router(promptsRouter)
 
 
 @app.get("/")

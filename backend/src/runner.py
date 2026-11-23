@@ -79,6 +79,17 @@ async def run_single(
         "required_keywords": q.get("required_keywords"),
         "forbidden_keywords": q.get("forbidden_keywords"),
         "requires_json": q.get("requires_json"),
+        "input_tokens": response.input_tokens,
+        "output_tokens": response.output_tokens,
+        "cost_usd": float(response.cost_usd) if response.cost_usd else None,
+        "input_cost_per_1m": float(provider.config.input_cost_per_1m) if provider.config.input_cost_per_1m else None,
+        "output_cost_per_1m": float(provider.config.output_cost_per_1m) if provider.config.output_cost_per_1m else None,
+        "cached_tokens": response.cached_tokens,
+        "reasoning_tokens": response.reasoning_tokens,
+        "latency_s": response.latency_s,
+        "attempts": response.attempts,
+        "usage_estimated": response.usage_estimated,
+        "error": response.error,
     }
 
 

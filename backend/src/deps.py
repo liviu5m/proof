@@ -1,17 +1,17 @@
 from sqlmodel import select
 
-from src.models import ProviderCredential
+from src.models import ModelCatalog, ProviderCredential
 
 from .config import settings
 from .llm import PROVIDERS, LLMProviderConfig
 from .security import decrypt_api_key
-
 
 def get_llm_provider(
     provider: str,
     user_id: int | None = None,
     session=None,
     ollama_base_url: str | None = None,
+    model: str | None = None
 ):
     """Returns an LLMProvider instance for the given provider name.
 
@@ -51,6 +51,23 @@ def get_llm_provider(
         base_url = ollama_base_url
     elif base_url is None:
         base_url = getattr(settings, "OLLAMA_BASE_URL", None)
+    input_cost = None
+    output_cost = None
+    if model and session:
+        catalog = session.exec(
+            select(ModelCatalog).where(
+                ModelCatalog.provider == provider,
+                ModelCatalog.model_id == model,
+            )
+        ).first()
+        if catalog:
+            input_cost = catalog.input_cost_per_1m
+            output_cost = catalog.output_cost_per_1m
 
-    config = LLMProviderConfig(api_key=api_key, base_url=base_url)
+    config = LLMProviderConfig(
+        api_key=api_key,
+        base_url=base_url,
+        input_cost_per_1m=input_cost,
+        output_cost_per_1m=output_cost,
+    )
     return provider_class(config)

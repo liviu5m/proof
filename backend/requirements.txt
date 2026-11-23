@@ -131,3 +131,5 @@ mypy
 bandit
 black
 isort
+sentence-transformers
+numpy
