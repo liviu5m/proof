@@ -4,14 +4,17 @@ from difflib import unified_diff
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import desc
-from sqlmodel import select
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, select
 
 from src.db import SessionDep
 from src.models import PromptRegistry, PromptVersion, ProofUserRole, Users
 from src.utils import (
     get_current_user,
+    get_current_version,
     get_registry_or_404,
     hash_content,
+    next_version_sequence,
     registry_out,
     require_member,
     require_viewer,
@@ -40,6 +43,7 @@ class PromptRegistryOut(BaseModel):
     description: str | None
     user_id: int
     current_version_id: int | None
+    current_version_position: int | None
     version_count: int
     created_at: datetime
     updated_at: datetime
@@ -52,6 +56,7 @@ class PromptVersionOut(BaseModel):
     content: str
     description: str | None
     is_current: bool
+    version_number: int
     created_at: datetime
 
 
@@ -60,7 +65,10 @@ class PromptRegistryDetailOut(BaseModel):
     name: str
     description: str | None
     user_id: int
+    current_version_id: int | None
     current_version: PromptVersionOut | None
+    current_version_position: int | None
+    version_count: int
     versions: list[PromptVersionOut]
     created_at: datetime
     updated_at: datetime
@@ -71,10 +79,40 @@ class PromptVersionCreate(BaseModel):
     description: str | None = None
 
 
+class PromptRegistryUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
 class PromptCompareOut(BaseModel):
     v1: PromptVersionOut
     v2: PromptVersionOut
     diff: str
+
+
+def version_out(version: PromptVersion) -> PromptVersionOut:
+    return PromptVersionOut(
+        id=version.id,
+        registry_id=version.registry_id,
+        content_hash=version.content_hash,
+        content=version.content,
+        description=version.description,
+        is_current=version.is_current,
+        version_number=version.sequence,
+        created_at=version.created_at,
+    )
+
+
+def _touch_registry(registry: PromptRegistry) -> None:
+    registry.updated_at = datetime.now(UTC)
+
+
+def _versions_for(session: Session, registry_id: int) -> list[PromptVersion]:
+    stmt = select(PromptVersion).where(
+        PromptVersion.registry_id == registry_id,
+        PromptVersion.deleted_at == None,  # noqa: E712
+    )
+    return list(session.exec(stmt).all())
 
 
 # ── Endpoints ───────────────────────────────────────────────────────────
@@ -131,6 +169,7 @@ async def create_prompt_registry(
         content=payload.initial_content,
         description="Initial version",
         is_current=True,
+        sequence=1,
     )
     session.add(version)
     session.commit()
@@ -154,17 +193,20 @@ async def get_prompt_registry(
     ).order_by(desc(PromptVersion.created_at))
     versions = session.exec(versions_stmt).all()
 
-    current = next((v for v in versions if v.is_current), None)
+    current = get_current_version(versions)
 
     return PromptRegistryDetailOut(
         id=registry.id,
         name=registry.name,
         description=registry.description,
         user_id=registry.user_id,
+        current_version_id=current.id if current else None,
+        current_version_position=current.sequence if current else None,
+        version_count=len(versions),
         current_version=(
-            PromptVersionOut.model_validate(current, from_attributes=True) if current else None
+            version_out(current) if current else None
         ),
-        versions=[PromptVersionOut.model_validate(v,from_attributes=True) for v in versions],
+        versions=[version_out(v) for v in versions],
         created_at=registry.created_at,
         updated_at=registry.updated_at,
     )
@@ -186,18 +228,40 @@ async def create_prompt_version(
     registry = get_registry_or_404(session, registry_id, user)
 
     content_hash = hash_content(payload.content)
-    version = PromptVersion(
-        registry_id=registry_id,
-        content_hash=content_hash,
-        content=payload.content,
-        description=payload.description,
-        is_current=False,
-    )
-    session.add(version)
-    session.commit()
-    session.refresh(version)
+    version = None
+    for _ in range(3):
+        candidate = PromptVersion(
+            registry_id=registry_id,
+            content_hash=content_hash,
+            content=payload.content,
+            description=payload.description,
+            is_current=False,
+            sequence=next_version_sequence(session, registry_id),
+        )
+        session.add(candidate)
+        _touch_registry(registry)
+        session.add(registry)
+        try:
+            session.commit()
+        except IntegrityError:
+            # another create took this sequence: retry with a fresh MAX+1
+            session.rollback()
+            session.refresh(registry)
+            continue
+        version = candidate
+        break
 
-    return PromptVersionOut.model_validate(version,from_attributes=True )
+    if version is None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "Could not allocate a version number, retry",
+                "code": "sequence_conflict",
+            },
+        )
+
+    session.refresh(version)
+    return version_out(version)
 
 
 @router.post(
@@ -237,6 +301,8 @@ async def activate_prompt_version(
 
     version.is_current = True
     session.add(version)
+    _touch_registry(registry)
+    session.add(registry)
     session.commit()
 
     return registry_out(session, registry)
@@ -274,20 +340,110 @@ async def compare_prompt_versions(
 
     lines1 = version1.content.splitlines(keepends=True)
     lines2 = version2.content.splitlines(keepends=True)
+
     diff = "".join(
         unified_diff(
-            lines1,
-            lines2,
-            fromfile=f"v{version1.id}",
-            tofile=f"v{version2.id}",
+            version1.content.splitlines(keepends=True),
+            version2.content.splitlines(keepends=True),
+            fromfile=f"v{version1.sequence}",
+            tofile=f"v{version2.sequence}",
         )
     )
 
     return PromptCompareOut(
-        v1=PromptVersionOut.model_validate(version1,from_attributes=True ),
-        v2=PromptVersionOut.model_validate(version2, from_attributes=True),
+        v1=version_out(version1),
+        v2=version_out(version2),
         diff=diff,
     )
+
+
+@router.patch("/{registry_id}", response_model=PromptRegistryOut)
+async def update_prompt_registry(
+    registry_id: int,
+    payload: PromptRegistryUpdate,
+    session: SessionDep,
+    user: Users = Depends(get_current_user),
+    _: Users = Depends(require_member),
+    __: Request = Depends(verify_csrf),
+):
+    registry = get_registry_or_404(session, registry_id, user)
+
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Registry name is required", "code": "invalid_name"},
+            )
+        if len(name) > 200:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Registry name must be 200 characters or fewer",
+                    "code": "invalid_name",
+                },
+            )
+        registry.name = name
+
+    if payload.description is not None:
+        description = payload.description.strip()
+        if len(description) > 1000:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Description must be 1000 characters or fewer",
+                    "code": "invalid_description",
+                },
+            )
+        registry.description = description or None
+
+    _touch_registry(registry)
+    session.add(registry)
+    session.commit()
+
+    return registry_out(session, registry)
+
+
+@router.delete("/{registry_id}/versions/{version_id}", status_code=status.HTTP_200_OK)
+async def delete_prompt_version(
+    registry_id: int,
+    version_id: int,
+    session: SessionDep,
+    user: Users = Depends(get_current_user),
+    _: Users = Depends(require_member),
+    __: Request = Depends(verify_csrf),
+):
+    registry = get_registry_or_404(session, registry_id, user)
+
+    version_stmt = select(PromptVersion).where(
+        PromptVersion.id == version_id,
+        PromptVersion.registry_id == registry_id,
+        PromptVersion.deleted_at == None,  # noqa: E712
+    )
+    version = session.exec(version_stmt).first()
+    if not version:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "Version not found", "code": "not_found"},
+        )
+
+    version.deleted_at = datetime.now(UTC)
+    version.is_current = False
+    session.add(version)
+    session.commit()
+
+    # Promote the newest remaining version if the active one was deleted
+    remaining = _versions_for(session, registry_id)
+    if remaining and not any(v.is_current for v in remaining):
+        newest = max(remaining, key=lambda v: (v.created_at, v.id or 0))
+        newest.is_current = True
+        session.add(newest)
+
+    _touch_registry(registry)
+    session.add(registry)
+    session.commit()
+
+    return {"success": "Version deleted"}
 
 
 @router.delete("/{registry_id}", status_code=status.HTTP_200_OK)

@@ -13,6 +13,7 @@ import pyclamd
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, Request, UploadFile, status
 from passlib.context import CryptContext
+from sqlalchemy import func
 from sqlmodel import select
 
 from src.config import settings
@@ -280,6 +281,26 @@ def get_registry_or_404(
     return registry
 
 
+def get_current_version(versions: list[PromptVersion]) -> PromptVersion | None:
+    """Return the version marked is_current, falling back to the newest if none set."""
+    current = next((v for v in versions if v.is_current), None)
+    if current is not None:
+        return current
+    # Fallback: no version marked current — return the most recently created one
+    if versions:
+        return max(versions, key=lambda v: v.created_at)
+    return None
+
+
+def next_version_sequence(session: SessionDep, registry_id: int) -> int:
+    """Next ordinal for a registry. Includes soft-deleted rows so numbers are never reused."""
+    current_max = session.exec(
+        select(func.coalesce(func.max(PromptVersion.sequence), 0)).where(
+            PromptVersion.registry_id == registry_id
+        )
+    ).one()
+    return int(current_max) + 1
+
 def registry_out(session: SessionDep, registry: PromptRegistry) -> dict:
     """Serialize a registry with its versions and current version."""
     versions_stmt = select(PromptVersion).where(
@@ -288,14 +309,14 @@ def registry_out(session: SessionDep, registry: PromptRegistry) -> dict:
     )
     versions = session.exec(versions_stmt).all()
 
-    current = next((v for v in versions if v.is_current), None)
-
+    current = get_current_version(versions)
     return {
         "id": registry.id,
         "name": registry.name,
         "description": registry.description,
         "user_id": registry.user_id,
         "current_version_id": current.id if current else None,
+        "current_version_position": current.sequence if current else None,
         "version_count": len(versions),
         "created_at": registry.created_at,
         "updated_at": registry.updated_at,

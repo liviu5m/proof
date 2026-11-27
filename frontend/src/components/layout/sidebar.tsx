@@ -15,6 +15,7 @@ import {
   Database,
   PlayCircle,
   GitCompare,
+  GitBranch,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -26,6 +27,7 @@ const navigation = [
   { name: "Datasets", href: "/dashboard/datasets", icon: Database },
   { name: "New Evaluation", href: "/dashboard/evaluate", icon: PlayCircle },
   { name: "Compare Runs", href: "/dashboard/compare", icon: GitCompare },
+  { name: "Prompt Registry", href: "/dashboard/prompts", icon: GitBranch },
 ];
 
 export function Sidebar() {

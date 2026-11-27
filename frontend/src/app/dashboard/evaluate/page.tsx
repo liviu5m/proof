@@ -27,15 +27,20 @@ import {
   Galaxy,
   Zap,
   Wand2,
+  SlidersHorizontal,
+  Hash,
+  Brain,
 } from "lucide-react";
 import { toast } from "sonner";
 import Loader from "@/components/Loader";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getDatasets } from "@/api/datasets";
+import { getPromptRegistry } from "@/api/prompts";
 import { Dataset } from "@/types";
 import { createRun } from "@/api/run";
 import { getModels, syncModels } from "@/api/models";
 import { ModelCatalogItem } from "@/api/models";
+import { PromptSelector } from "@/components/prompts/PromptSelector";
 
 const PROVIDER_OPTIONS = [
   { value: "google", label: "Google", color: "text-indigo-400", bg: "bg-indigo-500/10" },
@@ -54,6 +59,8 @@ export default function EvaluatePage() {
   const [judgeProviderName, setJudgeProviderName] = useState("google");
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
   const [ollamaBaseUrlJudge, setOllamaBaseUrlJudge] = useState("http://localhost:11434");
+  const [selectedRegistryId, setSelectedRegistryId] = useState<number | undefined>(undefined);
+  const [selectedVersionId, setSelectedVersionId] = useState<number | undefined>(undefined);
   const [modelSearch, setModelSearch] = useState("");
   const [judgeModelSearch, setJudgeModelSearch] = useState("");
   const [systemPrompt, setSystemPrompt] = useState(
@@ -62,6 +69,7 @@ export default function EvaluatePage() {
   const [judgeSystemPrompt, setJudgeSystemPrompt] = useState(
     "You are an expert AI judge evaluating responses based on accuracy, helpfulness, and tone.",
   );
+  const [scorerWeights, setScorerWeights] = useState({ rule: 0.3, llm: 0.4, semantic: 0.3 });
 
   const { data: datasets, isLoading: datasetsLoading, error: datasetsError } = useQuery({
     queryKey: ["datasets", datasetSearch],
@@ -113,18 +121,31 @@ export default function EvaluatePage() {
     }
   }, [datasets, selectedDataset]);
 
+  const { data: promptVersionContent, isLoading: promptVersionLoading } = useQuery({
+    queryKey: ["promptVersion", selectedRegistryId, selectedVersionId],
+    queryFn: async () => {
+      if (!selectedRegistryId || !selectedVersionId) return "";
+      const registry = await getPromptRegistry(selectedRegistryId);
+      const version = registry?.versions?.find((v: any) => v.id === selectedVersionId);
+      return version?.content || "";
+    },
+    enabled: Boolean(selectedRegistryId && selectedVersionId),
+  });
+
   const { mutate: runEvaluation, isPending } = useMutation({
     mutationKey: ["runEvaluation"],
     mutationFn: () =>
       createRun({
         dataset_id: selectedDataset,
         model: modelName,
-        system_prompt: systemPrompt,
+        system_prompt: promptVersionContent || systemPrompt,
+        prompt_version_id: selectedVersionId,
         judge_model: judgemodelName,
         provider: providerName,
         judge_provider: judgeProviderName,
         ollama_base_url: providerName === "ollama" ? ollamaBaseUrl : undefined,
         ollama_base_url_judge: judgeProviderName === "ollama" ? ollamaBaseUrlJudge : undefined,
+        scorer_weights: scorerWeights,
       }),
     onSuccess: (data) => {
       console.log(data);
@@ -153,12 +174,35 @@ export default function EvaluatePage() {
         {/* Runner Model Card */}
         <Card className="bg-slate-900/80 border-slate-800/30 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
           <CardHeader className="border-b border-slate-800/30 px-6 py-4">
-            <CardTitle className="text-base font-semibold text-white flex items-center gap-2">
-              <Cpu className="h-4 w-4 text-indigo-400" /> Runner Model
-            </CardTitle>
-            <CardDescription className="text-slate-500 text-sm">
-              Model that generates answers
-            </CardDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="text-base font-semibold text-white flex items-center gap-2">
+                  <Cpu className="h-4 w-4 text-indigo-400" /> Runner Model
+                </CardTitle>
+                <CardDescription className="text-slate-500 text-sm">
+                  Model that generates answers
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
+                className="gap-2 bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white cursor-pointer disabled:opacity-50"
+              >
+                {syncMutation.isPending ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    Sync Models
+                  </>
+                )}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="p-6 space-y-5">
             <div className="space-y-2">
@@ -343,12 +387,27 @@ export default function EvaluatePage() {
 
             <div className="space-y-2">
               <Label className="text-slate-300 font-medium">System Prompt</Label>
-              <Textarea
-                value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
-                className="bg-slate-950/60 border border-slate-800 text-white min-h-[120px] resize-none"
-                placeholder="Enter system prompt for runner..."
+              <PromptSelector
+                selectedRegistryId={selectedRegistryId}
+                selectedVersionId={selectedVersionId}
+                onChange={(registryId, versionId) => {
+                  setSelectedRegistryId(registryId);
+                  setSelectedVersionId(versionId);
+                }}
+                className="w-full"
               />
+              {promptVersionContent && !promptVersionLoading ? (
+                <>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Using prompt version content as system prompt.
+                  </p>
+                  <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 mt-2 max-h-64 overflow-y-auto">
+                    <p className="text-xs text-slate-400 font-mono truncate">{promptVersionContent}</p>
+                  </div>
+                </>
+              ) : promptVersionLoading ? (
+                <p className="text-xs text-slate-400 mt-1">Loading prompt version...</p>
+              ) : null}
             </div>
           </div>
 
@@ -360,6 +419,103 @@ export default function EvaluatePage() {
               className="bg-slate-950/60 border border-slate-800 text-white min-h-[100px] resize-none"
               placeholder="Enter judge rubric instructions..."
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Scorer Weights Card */}
+      <Card className="bg-slate-900/80 border-slate-800/30 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
+        <CardHeader className="border-b border-slate-800/30 px-6 py-4">
+          <CardTitle className="text-base font-semibold text-white flex items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4 text-lime-500" /> Scorer Weights
+          </CardTitle>
+          <CardDescription className="text-slate-500 text-sm">
+            Configure how much each scorer contributes to the final score
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-6 space-y-5">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+                  <Hash className="h-4 w-4 text-indigo-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-white">Rule-based</p>
+                  <p className="text-xs text-slate-400">Exact match, regex, word count, keywords</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 w-48">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={scorerWeights.rule}
+                  onChange={(e) => setScorerWeights({ ...scorerWeights, rule: parseFloat(e.target.value) })}
+                  className="flex-1 h-2 bg-slate-800 rounded-lg appearance-none accent-indigo-500 cursor-pointer"
+                />
+                <span className="text-sm font-mono text-indigo-400 w-10 text-right">
+                  {(scorerWeights.rule * 100).toFixed(0)}%
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-slate-500/20 flex items-center justify-center">
+                  <Cpu className="h-4 w-4 text-slate-300" />
+                </div>
+                <div>
+                  <p className="font-medium text-white">LLM Judge</p>
+                  <p className="text-xs text-slate-400">AI evaluation of quality & correctness</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 w-48">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={scorerWeights.llm}
+                  onChange={(e) => setScorerWeights({ ...scorerWeights, llm: parseFloat(e.target.value) })}
+                  className="flex-1 h-2 bg-slate-800 rounded-lg appearance-none accent-slate-400 cursor-pointer"
+                />
+                <span className="text-sm font-mono text-slate-300 w-10 text-right">
+                  {(scorerWeights.llm * 100).toFixed(0)}%
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                  <Brain className="h-4 w-4 text-emerald-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-white">Semantic Similarity</p>
+                  <p className="text-xs text-slate-400">Embedding-based paraphrase detection</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 w-48">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={scorerWeights.semantic}
+                  onChange={(e) => setScorerWeights({ ...scorerWeights, semantic: parseFloat(e.target.value) })}
+                  className="flex-1 h-2 bg-slate-800 rounded-lg appearance-none accent-emerald-500 cursor-pointer"
+                />
+                <span className="text-sm font-mono text-emerald-400 w-10 text-right">
+                  {(scorerWeights.semantic * 100).toFixed(0)}%
+                </span>
+              </div>
+            </div>
+            <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-sm">
+              <span className="text-slate-400">Total Weight:</span>
+              <span className="font-mono text-lime-400">
+                {((scorerWeights.rule + scorerWeights.llm + scorerWeights.semantic) * 100).toFixed(0)}%
+              </span>
+            </div>
           </div>
         </CardContent>
       </Card>

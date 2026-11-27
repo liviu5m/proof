@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import NUMERIC, Column, Field, SQLModel, Text
 
 
@@ -49,6 +50,9 @@ class Runs(SQLModel, table=True):
     system_prompt: str = Field(nullable=False)
     judge_model: str = Field(nullable=False)
     avg_score: float | None = Field(default=None)
+    prompt_version_id: int | None = Field(
+        default=None, foreign_key="prompt_versions.id", nullable=True
+    )
     total: int = Field(nullable=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), nullable=False
@@ -178,10 +182,16 @@ class PromptRegistry(SQLModel, table=True):
 
 class PromptVersion(SQLModel, table=True):
     __tablename__ = "prompt_versions"
-
+    __table_args__ = (
+        UniqueConstraint(
+            "registry_id", "sequence",
+            name="uq_prompt_versions_registry_sequence",
+        ),
+    )
     id: int | None = Field(default=None, primary_key=True)
     registry_id: int = Field(foreign_key="prompt_registries.id", nullable=False)
     content_hash: str = Field(nullable=False, max_length=64)  # sha256 hex of content
+    sequence: int = Field(nullable=False)
     content: str = Field(sa_column=Column(Text))
     description: str | None = Field(default=None, max_length=500)
     is_current: bool = Field(default=False, nullable=False)

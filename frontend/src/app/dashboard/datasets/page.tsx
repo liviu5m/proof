@@ -90,14 +90,19 @@ export default function DatasetsPage() {
     }
   };
 
-  const { data: datasets, isLoading, error: datasetsError } = useQuery({
+  const {
+    data: datasets,
+    isLoading,
+    error: datasetsError,
+  } = useQuery({
     queryKey: ["datasets", searchQuery],
     queryFn: () => getDatasets(searchQuery),
   });
 
   if (datasetsError) {
     toast.error(
-      (datasetsError as any)?.response?.data?.error || "Failed to load datasets"
+      (datasetsError as any)?.response?.data?.error ||
+        "Failed to load datasets",
     );
   }
 

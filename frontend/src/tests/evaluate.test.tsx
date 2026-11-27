@@ -52,9 +52,9 @@ const mockDatasets = [
 ];
 
 const mockModels = [
-  { id: "1", name: "gemini-3.5-flash-lite", provider: "google", supports_json_mode: true, supports_system_prompt: true, max_tokens: 8192, cost_per_1k_tokens: 0.001 },
-  { id: "2", name: "gpt-4", provider: "openai", supports_json_mode: true, supports_system_prompt: true, max_tokens: 8192, cost_per_1k_tokens: 0.03 },
-  { id: "3", name: "claude-3", provider: "anthropic", supports_json_mode: true, supports_system_prompt: true, max_tokens: 4096, cost_per_1k_tokens: 0.015 },
+  { id: "1", name: "gemini-3.5-flash-lite", provider: "google", supports_json_mode: true, supports_system_prompt: true, max_tokens: 8192, input_cost_per_1m: 1.0, output_cost_per_1m: 4.0 },
+  { id: "2", name: "gpt-4", provider: "openai", supports_json_mode: true, supports_system_prompt: true, max_tokens: 8192, input_cost_per_1m: 30.0, output_cost_per_1m: 60.0 },
+  { id: "3", name: "claude-3", provider: "anthropic", supports_json_mode: true, supports_system_prompt: true, max_tokens: 4096, input_cost_per_1m: 15.0, output_cost_per_1m: 75.0 },
 ];
 
 describe("EvaluatePage", () => {

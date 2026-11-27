@@ -48,6 +48,14 @@ export interface Result {
   latency_ms: number | null;
 }
 
+export interface PromptVersionSummary {
+  id: number;
+  registry_id: number;
+  version_number: number | null;
+  content_hash: string;
+  deleted: boolean;
+}
+
 export interface Run {
   id: number;
   dataset_id: number;
@@ -55,6 +63,8 @@ export interface Run {
   provider: string;
   provider_judge: string;
   system_prompt: string;
+  prompt_version_id: number | null;
+  prompt_version?: PromptVersionSummary | null;
   judge_model: string;
   avg_score: number | null;
   total: number;
@@ -64,15 +74,23 @@ export interface Run {
   results?: Result[];
 }
 
+export interface ScorerWeights {
+  rule: number;
+  llm: number;
+  semantic: number;
+}
+
 export interface RunData {
   dataset_id: number;
   model: string;
   system_prompt: string;
+  prompt_version_id?: number;
   judge_model: string;
   provider: string;
   judge_provider: string;
   ollama_base_url?: string;
   ollama_base_url_judge?: string;
+  scorer_weights?: ScorerWeights;
 }
 
 export interface ProviderCredential {
@@ -96,4 +114,18 @@ export interface CompareData {
     run_b_score: number | null;
     diff: number | null;
   }>;
+}
+
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  cost_usd: number | null;
+  input_cost_per_1m: number | null;
+  output_cost_per_1m: number | null;
+  cached_tokens: number;
+  reasoning_tokens: number;
+  total_latency_s: number;
+  total_attempts: number;
+  usage_estimated: boolean;
+  pricing: "estimated" | "unknown";
 }

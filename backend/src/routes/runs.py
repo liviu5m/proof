@@ -5,12 +5,21 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import desc
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from src.db import SessionDep, supabase
 from src.deps import get_llm_provider
 from src.judge import judge_questions
-from src.models import Datasets, ProofUserRole, Results, Runs, TokenUsage, Users
+from src.models import (
+    Datasets,
+    PromptRegistry,
+    PromptVersion,
+    ProofUserRole,
+    Results,
+    Runs,
+    TokenUsage,
+    Users,
+)
 from src.rate_limit import check_concurrent_run, rate_limit_runs, release_concurrent_run
 from src.runner import run_tests
 from src.utils import (
@@ -40,6 +49,56 @@ class RunCreateRequest(BaseModel):
     ollama_base_url: str | None = None
     ollama_base_url_judge: str | None = None
     scorer_weights: dict | None = None
+    prompt_version_id: int | None = None
+
+
+def _prompt_version_summaries(session: Session, runs: list[Runs]) -> dict[int, dict]:
+    """vN + hash for the prompt version each run used, in one query per request."""
+    ids = {run.prompt_version_id for run in runs if run.prompt_version_id}
+    if not ids:
+        return {}
+    versions = session.exec(
+        select(PromptVersion).where(PromptVersion.id.in_(ids))  # type: ignore[attr-defined]
+    ).all()
+    return {
+        v.id: {
+            "id": v.id,
+            "registry_id": v.registry_id,
+            "version_number": v.sequence,
+            "content_hash": v.content_hash,
+            "deleted": v.deleted_at is not None,
+        }
+        for v in versions
+    }
+
+
+def resolve_system_prompt(
+    session: Session, user: Users, payload: RunCreateRequest
+) -> str:
+    """Use the selected immutable prompt version when given, else the raw prompt."""
+    if payload.prompt_version_id is None:
+        return sanitize_prompt(payload.system_prompt)
+
+    version = session.get(PromptVersion, payload.prompt_version_id)
+    if not version or version.deleted_at is not None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "Prompt version not found", "code": "not_found"},
+        )
+
+    registry = session.get(PromptRegistry, version.registry_id)
+    if not registry or registry.deleted_at is not None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "Prompt registry not found", "code": "not_found"},
+        )
+    if user.role != ProofUserRole.ADMIN and registry.user_id != user.id:
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "Not your prompt registry", "code": "forbidden"},
+        )
+
+    return sanitize_prompt(version.content)
 
 
 @router.post("/")
@@ -95,7 +154,7 @@ async def createRun(
             status_code=400, detail={"errors": row_errors, "code": "invalid_rows"}
         )
 
-    clean_system_prompt = sanitize_prompt(payload.system_prompt)
+    clean_system_prompt = resolve_system_prompt(session, user, payload)
     clean_judge_model = sanitize_text(payload.judge_model, max_length=100)
     await check_concurrent_run(user.id)
     provider = get_llm_provider(
@@ -127,6 +186,7 @@ async def createRun(
         provider=payload.provider,
         provider_judge=payload.judge_provider,
         system_prompt=clean_system_prompt,
+        prompt_version_id=payload.prompt_version_id,
         judge_model=clean_judge_model,
         avg_score=avg_score,
         total=len(data),
@@ -226,6 +286,7 @@ async def getRuns(
     runs_stmt = runs_stmt.order_by(desc(Runs.created_at))  # type: ignore[arg-type]
     runs = session.exec(runs_stmt).all()
 
+    summaries = _prompt_version_summaries(session, [run for run, _ in runs])
     response = []
     for run, dataset_name in runs:
         results_stmt = (
@@ -238,6 +299,7 @@ async def getRuns(
         response.append(
             {
                 **run.model_dump(),
+                "prompt_version": summaries.get(run.prompt_version_id),
                 "datasetName": dataset_name,
                 "results": [r.model_dump() for r in results],
             }
@@ -281,6 +343,9 @@ async def get_run(
 
     return {
         **run.model_dump(),
+        "prompt_version": _prompt_version_summaries(session, [run]).get(
+            run.prompt_version_id
+        ),
         "datasetName": dataset.name,
         "results": [r.model_dump() for r in results],
     }
