@@ -7,9 +7,8 @@ from typing import Any
 import httpx
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
-from .cost import calculate_cost
-
 from .base import LLMProvider, LLMProviderConfig, LLMResponse
+from .cost import calculate_cost
 
 try:
     from google import genai
@@ -205,7 +204,9 @@ class OpenAIProvider(LLMProvider):
         usage = response.usage
         prompt_tokens = _int(usage, "prompt_tokens")
         completion_tokens = _int(usage, "completion_tokens")  # includes reasoning
-        cached_tokens = _int(getattr(usage, "prompt_tokens_details", None), "cached_tokens")
+        cached_tokens = _int(
+            getattr(usage, "prompt_tokens_details", None), "cached_tokens"
+        )
         reasoning_tokens = _int(
             getattr(usage, "completion_tokens_details", None), "reasoning_tokens"
         )
@@ -232,7 +233,11 @@ class OpenAIProvider(LLMProvider):
         if tiktoken is None:
             return _estimate_tokens(text)
         try:
-            enc = tiktoken.encoding_for_model(model) if model else tiktoken.get_encoding("o200k_base")
+            enc = (
+                tiktoken.encoding_for_model(model)
+                if model
+                else tiktoken.get_encoding("o200k_base")
+            )
         except KeyError:
             enc = tiktoken.get_encoding("o200k_base")
         return max(1, len(enc.encode(text)))

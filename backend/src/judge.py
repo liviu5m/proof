@@ -1,7 +1,8 @@
 import asyncio
 import json
-from typing import Any, Optional, Dict
 import re
+from typing import Any
+
 from src.llm import LLMProvider
 from src.scorers import check_json, check_keywords, check_regex, check_word_count
 from src.semantic_scorer import score_semantic_batch
@@ -127,13 +128,13 @@ def _rule_check(q: dict, response: str) -> dict | None:
 
 
 async def judge_single(
-    q: Dict[str, Any],
+    q: dict[str, Any],
     model: str,
     provider: LLMProvider,
-    sem: Optional[asyncio.Semaphore] = None,
+    sem: asyncio.Semaphore | None = None,
     semantic_score: float = 1.0,
-    weights: Optional[Dict[str, float]] = None,
-) -> Dict[str, Any]:
+    weights: dict[str, float] | None = None,
+) -> dict[str, Any]:
     if not q.get("response"):
         return {"score": 0.0, "reason": q.get("error") or "no response"}
 
@@ -182,7 +183,7 @@ async def judge_single(
         }
 
     judgement = _parse_judgement(result.text)
-    
+
     # Rule score: if _rule_check passed (failed is None), rule_score = 5.0
     # If _rule_check failed, we already returned early above
     rule_score = 5.0
@@ -192,9 +193,9 @@ async def judge_single(
 
     total_w = weights["rule"] + weights["llm"] + weights["semantic"]
     final_score = (
-        rule_score * weights["rule"] +
-        llm_score * weights["llm"] + 
-        semantic_score * weights["semantic"]
+        rule_score * weights["rule"]
+        + llm_score * weights["llm"]
+        + semantic_score * weights["semantic"]
     ) / total_w
 
     judgement["score"] = final_score
@@ -202,8 +203,16 @@ async def judge_single(
         judgement["input_tokens"] = result.input_tokens
         judgement["output_tokens"] = result.output_tokens
         judgement["cost_usd"] = float(result.cost_usd) if result.cost_usd else None
-        judgement["input_cost_per_1m"] = float(provider.config.input_cost_per_1m) if provider.config.input_cost_per_1m else None
-        judgement["output_cost_per_1m"] = float(provider.config.output_cost_per_1m) if provider.config.output_cost_per_1m else None
+        judgement["input_cost_per_1m"] = (
+            float(provider.config.input_cost_per_1m)
+            if provider.config.input_cost_per_1m
+            else None
+        )
+        judgement["output_cost_per_1m"] = (
+            float(provider.config.output_cost_per_1m)
+            if provider.config.output_cost_per_1m
+            else None
+        )
         judgement["cached_tokens"] = result.cached_tokens
         judgement["reasoning_tokens"] = result.reasoning_tokens
         judgement["latency_s"] = result.latency_s
@@ -220,34 +229,60 @@ async def judge_single(
         }
 
 
+def _without_semantic(weights: dict[str, float]) -> dict[str, float]:
+    """Drop semantic from the blend and let the judge renormalize over the rest."""
+    fallback = {**weights, "semantic": 0.0}
+    if sum(fallback.values()) <= 0:
+        return {"rule": 0.3, "llm": 0.4, "semantic": 0.0}
+    return fallback
+
+
 async def judge_questions(
-    data: list[Dict[str, Any]], 
-    model: str, 
-    provider: LLMProvider, 
-    scorer_weights: Optional[Dict[str, float]] = None
-) -> list[Dict[str, Any]]:
+    data: list[dict[str, Any]],
+    model: str,
+    provider: LLMProvider,
+    scorer_weights: dict[str, float] | None = None,
+) -> list[dict[str, Any]]:
 
     weights = scorer_weights or {"rule": 0.3, "llm": 0.4, "semantic": 0.3}
-    
+
     # Build pairs for ALL questions (use empty string if missing expected/response)
     pairs = []
     for q in data:
         expected = q.get("expected", "")
         response = q.get("response", "")
         pairs.append((expected, response))
-    
-    semantic_results = await score_semantic_batch(pairs)
-    
+
+    try:
+        semantic_results = await score_semantic_batch(pairs)
+    except Exception as e:
+        # Embeddings are optional: a failure must not kill the whole run.
+        print(f"Semantic scoring failed, falling back to rule + LLM: {e!r}")
+        semantic_results = []
+
     sem = asyncio.Semaphore(MAX_CONCURRENCY)
-    tasks = [
-        judge_single(q, model, provider, sem, 
-                     semantic_score=semantic_results[idx].get("score", 1.0), 
-                     weights=weights) 
-        for idx, q in enumerate(data)
-    ]
+    tasks = []
+    for idx, q in enumerate(data):
+        item_weights = weights
+        semantic_score = 1.0
+        if idx < len(semantic_results):
+            semantic_score = semantic_results[idx].get("score", 1.0)
+        # No expected answer or no embeddings: do not let semantic drag the score.
+        if idx >= len(semantic_results) or not q.get("expected"):
+            item_weights = _without_semantic(weights)
+        tasks.append(
+            judge_single(
+                q,
+                model,
+                provider,
+                sem,
+                semantic_score=semantic_score,
+                weights=item_weights,
+            )
+        )
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    normalized: list[Dict[str, Any]] = []
+    normalized: list[dict[str, Any]] = []
     for r in results:
         if isinstance(r, Exception):
             normalized.append(

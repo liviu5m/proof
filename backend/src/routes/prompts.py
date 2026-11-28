@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from src.db import SessionDep
-from src.models import PromptRegistry, PromptVersion, ProofUserRole, Users
+from src.models import PromptRegistry, PromptVersion, Users
 from src.utils import (
     get_current_user,
     get_current_version,
@@ -26,8 +26,6 @@ router = APIRouter(
     prefix="/api/prompts",
     dependencies=[Depends(verifyUserTokenSession)],
 )
-
-
 
 
 class PromptRegistryCreate(BaseModel):
@@ -91,6 +89,7 @@ class PromptCompareOut(BaseModel):
 
 
 def version_out(version: PromptVersion) -> PromptVersionOut:
+    assert version.id is not None
     return PromptVersionOut(
         id=version.id,
         registry_id=version.registry_id,
@@ -110,7 +109,7 @@ def _touch_registry(registry: PromptRegistry) -> None:
 def _versions_for(session: Session, registry_id: int) -> list[PromptVersion]:
     stmt = select(PromptVersion).where(
         PromptVersion.registry_id == registry_id,
-        PromptVersion.deleted_at == None,  # noqa: E712
+        PromptVersion.deleted_at == None,
     )
     return list(session.exec(stmt).all())
 
@@ -127,18 +126,16 @@ async def list_prompt_registries(
 ):
     stmt = select(PromptRegistry).where(
         PromptRegistry.user_id == user.id,
-        PromptRegistry.deleted_at == None,  # noqa: E712
+        PromptRegistry.deleted_at == None,
     )
     if search:
         stmt = stmt.where(PromptRegistry.name.ilike(f"%{search}%"))  # type: ignore[attr-defined]
-    stmt = stmt.order_by(desc(PromptRegistry.created_at))
+    stmt = stmt.order_by(desc(PromptRegistry.created_at))  # type: ignore[arg-type]
     registries = session.exec(stmt).all()
     return [registry_out(session, r) for r in registries]
 
 
-@router.post(
-    "", response_model=PromptRegistryOut, status_code=status.HTTP_201_CREATED
-)
+@router.post("", response_model=PromptRegistryOut, status_code=status.HTTP_201_CREATED)
 async def create_prompt_registry(
     payload: PromptRegistryCreate,
     session: SessionDep,
@@ -153,6 +150,7 @@ async def create_prompt_registry(
             detail={"error": "Registry name is required", "code": "invalid_name"},
         )
 
+    assert user.id is not None
     registry = PromptRegistry(
         name=name,
         description=payload.description,
@@ -162,6 +160,7 @@ async def create_prompt_registry(
     session.commit()
     session.refresh(registry)
 
+    assert registry.id is not None
     content_hash = hash_content(payload.initial_content)
     version = PromptVersion(
         registry_id=registry.id,
@@ -186,11 +185,16 @@ async def get_prompt_registry(
     _: Users = Depends(require_viewer),
 ):
     registry = get_registry_or_404(session, registry_id, user)
+    assert registry.id is not None
 
-    versions_stmt = select(PromptVersion).where(
-        PromptVersion.registry_id == registry_id,
-        PromptVersion.deleted_at == None,  # noqa: E712
-    ).order_by(desc(PromptVersion.created_at))
+    versions_stmt = (
+        select(PromptVersion)
+        .where(
+            PromptVersion.registry_id == registry_id,
+            PromptVersion.deleted_at == None,
+        )
+        .order_by(desc(PromptVersion.created_at))  # type: ignore[arg-type]
+    )
     versions = session.exec(versions_stmt).all()
 
     current = get_current_version(versions)
@@ -203,9 +207,7 @@ async def get_prompt_registry(
         current_version_id=current.id if current else None,
         current_version_position=current.sequence if current else None,
         version_count=len(versions),
-        current_version=(
-            version_out(current) if current else None
-        ),
+        current_version=(version_out(current) if current else None),
         versions=[version_out(v) for v in versions],
         created_at=registry.created_at,
         updated_at=registry.updated_at,
@@ -229,7 +231,7 @@ async def create_prompt_version(
 
     content_hash = hash_content(payload.content)
     version = None
-    for _ in range(3):
+    for _attempt in range(3):
         candidate = PromptVersion(
             registry_id=registry_id,
             content_hash=content_hash,
@@ -281,7 +283,7 @@ async def activate_prompt_version(
     version_stmt = select(PromptVersion).where(
         PromptVersion.id == version_id,
         PromptVersion.registry_id == registry_id,
-        PromptVersion.deleted_at == None,  # noqa: E712
+        PromptVersion.deleted_at == None,
     )
     version = session.exec(version_stmt).first()
     if not version:
@@ -292,7 +294,7 @@ async def activate_prompt_version(
 
     all_versions_stmt = select(PromptVersion).where(
         PromptVersion.registry_id == registry_id,
-        PromptVersion.deleted_at == None,  # noqa: E712
+        PromptVersion.deleted_at == None,
     )
     all_versions = session.exec(all_versions_stmt).all()
     for v in all_versions:
@@ -317,17 +319,17 @@ async def compare_prompt_versions(
     user: Users = Depends(get_current_user),
     _: Users = Depends(require_viewer),
 ):
-    registry = get_registry_or_404(session, registry_id, user)
+    get_registry_or_404(session, registry_id, user)
 
     v1_stmt = select(PromptVersion).where(
         PromptVersion.id == v1,
         PromptVersion.registry_id == registry_id,
-        PromptVersion.deleted_at == None,  # noqa: E712
+        PromptVersion.deleted_at == None,
     )
     v2_stmt = select(PromptVersion).where(
         PromptVersion.id == v2,
         PromptVersion.registry_id == registry_id,
-        PromptVersion.deleted_at == None,  # noqa: E712
+        PromptVersion.deleted_at == None,
     )
     version1 = session.exec(v1_stmt).first()
     version2 = session.exec(v2_stmt).first()
@@ -338,8 +340,8 @@ async def compare_prompt_versions(
             detail={"error": "One or both versions not found", "code": "not_found"},
         )
 
-    lines1 = version1.content.splitlines(keepends=True)
-    lines2 = version2.content.splitlines(keepends=True)
+    version1.content.splitlines(keepends=True)
+    version2.content.splitlines(keepends=True)
 
     diff = "".join(
         unified_diff(
@@ -418,7 +420,7 @@ async def delete_prompt_version(
     version_stmt = select(PromptVersion).where(
         PromptVersion.id == version_id,
         PromptVersion.registry_id == registry_id,
-        PromptVersion.deleted_at == None,  # noqa: E712
+        PromptVersion.deleted_at == None,
     )
     version = session.exec(version_stmt).first()
     if not version:

@@ -24,12 +24,12 @@ class LLMResponse:
     raw: Any = None
 
     # --- extra per-call usage / diagnostics -------------------------------
-    cached_tokens: int = 0          # input tokens served from cache
-    reasoning_tokens: int = 0       # thinking tokens (already inside output_tokens)
-    latency_s: float = 0.0          # wall-clock time of the call
-    attempts: int = 1               # retry attempts (accurate for Google only)
-    usage_estimated: bool = False   # True if token counts were estimated
-    error: str | None = None        # set when the call failed
+    cached_tokens: int = 0  # input tokens served from cache
+    reasoning_tokens: int = 0  # thinking tokens (already inside output_tokens)
+    latency_s: float = 0.0  # wall-clock time of the call
+    attempts: int = 1  # retry attempts (accurate for Google only)
+    usage_estimated: bool = False  # True if token counts were estimated
+    error: str | None = None  # set when the call failed
 
     @property
     def total_tokens(self) -> int:

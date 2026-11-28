@@ -17,6 +17,7 @@ from src.utils import (
     require_viewer,
     sanitize_text,
     scan_file,
+    validate_scorer_weights,
     verify_csrf,
     verifyUserTokenSession,
 )
@@ -31,6 +32,12 @@ router = APIRouter(
 class Dataset(BaseModel):
     name: str
     file: str
+
+
+class ScorerWeightsIn(BaseModel):
+    rule: float
+    llm: float
+    semantic: float
 
 
 @router.post("")
@@ -139,6 +146,34 @@ async def getDataset(
     dataset = session.exec(stmt).first()
     if dataset is None:
         return {"error": "Dataset not found"}
+    return dataset.model_dump()
+
+
+@router.patch("/{dataset_id}/scorer-weights")
+async def updateDatasetScorerWeights(
+    dataset_id: int,
+    payload: ScorerWeightsIn,
+    session: SessionDep,
+    user: Users = Depends(get_current_user),
+    _: Users = Depends(require_member),
+    __: Request = Depends(verify_csrf),
+):
+    stmt = (
+        select(Datasets)
+        .where(Datasets.id == dataset_id, Datasets.user_id == user.id)
+        .where(Datasets.deleted_at == None)
+    )
+    dataset = session.exec(stmt).first()
+    if dataset is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "Dataset not found", "code": "not_found"},
+        )
+
+    dataset.scorer_weights = validate_scorer_weights(payload.model_dump())
+    session.add(dataset)
+    session.commit()
+    session.refresh(dataset)
     return dataset.model_dump()
 
 

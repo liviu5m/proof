@@ -1,5 +1,6 @@
+from typing import Any
+
 import numpy as np
-from typing import Dict, Any, List
 
 from .embeddings import get_embedding_provider
 
@@ -7,10 +8,9 @@ from .embeddings import get_embedding_provider
 async def score_semantic(
     expected: str,
     response: str,
-    threshold: float = 0.85,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Score response against expected using semantic similarity.
-    
+
     Returns dict with score (1-5), reason, and raw similarity value.
     """
     if not expected or not response:
@@ -47,25 +47,24 @@ async def score_semantic(
 
 
 async def score_semantic_batch(
-    pairs: List[tuple[str, str]],
-    threshold: float = 0.85,
-) -> List[Dict[str, Any]]:
+    pairs: list[tuple[str, str]],
+) -> list[dict[str, Any]]:
     """Score multiple (expected, response) pairs efficiently in one batch."""
     if not pairs:
         return []
 
     provider = get_embedding_provider()
-    
+
     # Flatten all texts for single batch embedding call
     all_texts = []
     for expected, response in pairs:
         all_texts.append(expected)
         all_texts.append(response)
-    
+
     embeddings = await provider.aembed(all_texts)
-    
+
     results = []
-    for i, (expected, response) in enumerate(pairs):
+    for i, _pair in enumerate(pairs):
         a = np.array(embeddings[i * 2])
         b = np.array(embeddings[i * 2 + 1])
         similarity = float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
@@ -81,10 +80,12 @@ async def score_semantic_batch(
         else:
             score = 1.0
 
-        results.append({
-            "score": score,
-            "reason": f"Semantic similarity: {similarity:.2f}",
-            "similarity": similarity,
-        })
-    
+        results.append(
+            {
+                "score": score,
+                "reason": f"Semantic similarity: {similarity:.2f}",
+                "similarity": similarity,
+            }
+        )
+
     return results

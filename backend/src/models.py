@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import JSON, UniqueConstraint
 from sqlmodel import NUMERIC, Column, Field, SQLModel, Text
 
 
@@ -34,6 +34,10 @@ class Datasets(SQLModel, table=True):
     item_count: int = Field(nullable=False, default=0)
     hash: str = Field(nullable=False)
     user_id: int = Field(foreign_key="users.id", nullable=False)
+    # Default scorer weights for runs on this dataset; null means system defaults.
+    scorer_weights: dict | None = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
     createdAt: datetime = Field(
         default_factory=lambda: datetime.now(UTC), nullable=False
     )
@@ -48,6 +52,10 @@ class Runs(SQLModel, table=True):
     provider: str = Field(default="google", nullable=False)
     provider_judge: str = Field(default="google", nullable=False)
     system_prompt: str = Field(nullable=False)
+    # Snapshot of the resolved scorer weights used for this run.
+    scorer_weights: dict | None = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
     judge_model: str = Field(nullable=False)
     avg_score: float | None = Field(default=None)
     prompt_version_id: int | None = Field(
@@ -126,8 +134,8 @@ class ModelCatalog(SQLModel, table=True):
     supports_json_mode: bool = Field(default=False)
     supports_system_prompt: bool = Field(default=True)
     input_cost_per_1m: Decimal | None = Field(
-            default=None, sa_column=Column(NUMERIC(12, 6), nullable=True)
-        )
+        default=None, sa_column=Column(NUMERIC(12, 6), nullable=True)
+    )
     output_cost_per_1m: Decimal | None = Field(
         default=None, sa_column=Column(NUMERIC(12, 6), nullable=True)
     )
@@ -136,6 +144,7 @@ class ModelCatalog(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), nullable=False
     )
+
 
 class TokenUsage(SQLModel, table=True):
     __tablename__ = "token_usage"
@@ -184,7 +193,8 @@ class PromptVersion(SQLModel, table=True):
     __tablename__ = "prompt_versions"
     __table_args__ = (
         UniqueConstraint(
-            "registry_id", "sequence",
+            "registry_id",
+            "sequence",
             name="uq_prompt_versions_registry_sequence",
         ),
     )

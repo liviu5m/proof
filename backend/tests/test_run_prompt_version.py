@@ -96,7 +96,7 @@ def test_admin_can_use_any_version(session):
 
 
 def test_run_summary_includes_ordinal_and_hash(session):
-    user = _user(session)
+    _user(session)
     registry, version = _registry(session, content="first")
     newer = PromptVersion(
         registry_id=registry.id,

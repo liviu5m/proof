@@ -5,6 +5,7 @@ import os
 import random
 import re
 import secrets
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 
 import bcrypt
@@ -19,9 +20,9 @@ from sqlmodel import select
 from src.config import settings
 from src.db import SessionDep
 from src.models import (
-    ProofUserRole,
     PromptRegistry,
     PromptVersion,
+    ProofUserRole,
     Users,
 )
 
@@ -251,9 +252,6 @@ def verify_csrf(request: Request):
         raise HTTPException(status_code=403, detail="Invalid referer")
 
 
-
-
-
 def hash_content(content: str) -> str:
     """SHA-256 content hash for immutable prompt versions."""
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -265,7 +263,7 @@ def get_registry_or_404(
     """Fetch a non-deleted registry, enforcing ownership."""
     stmt = select(PromptRegistry).where(
         PromptRegistry.id == registry_id,
-        PromptRegistry.deleted_at == None,  # noqa: E712
+        PromptRegistry.deleted_at == None,
     )
     registry = session.exec(stmt).first()
     if not registry:
@@ -281,7 +279,7 @@ def get_registry_or_404(
     return registry
 
 
-def get_current_version(versions: list[PromptVersion]) -> PromptVersion | None:
+def get_current_version(versions: Sequence[PromptVersion]) -> PromptVersion | None:
     """Return the version marked is_current, falling back to the newest if none set."""
     current = next((v for v in versions if v.is_current), None)
     if current is not None:
@@ -301,11 +299,48 @@ def next_version_sequence(session: SessionDep, registry_id: int) -> int:
     ).one()
     return int(current_max) + 1
 
+
+SCORER_WEIGHT_KEYS = ("rule", "llm", "semantic")
+
+
+def validate_scorer_weights(weights: dict | None) -> dict[str, float] | None:
+    """Validate rule/llm/semantic weights; None means use the system defaults."""
+    if weights is None:
+        return None
+    try:
+        parsed = {key: float(weights[key]) for key in SCORER_WEIGHT_KEYS}
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Scorer weights need rule, llm and semantic numbers",
+                "code": "invalid_scorer_weights",
+            },
+        ) from None
+    if any(value < 0 or value > 1 for value in parsed.values()):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Scorer weights must be between 0 and 1",
+                "code": "invalid_scorer_weights",
+            },
+        )
+    if sum(parsed.values()) <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Scorer weights must not all be zero",
+                "code": "invalid_scorer_weights",
+            },
+        )
+    return parsed
+
+
 def registry_out(session: SessionDep, registry: PromptRegistry) -> dict:
     """Serialize a registry with its versions and current version."""
     versions_stmt = select(PromptVersion).where(
         PromptVersion.registry_id == registry.id,
-        PromptVersion.deleted_at == None,  # noqa: E712
+        PromptVersion.deleted_at == None,
     )
     versions = session.exec(versions_stmt).all()
 

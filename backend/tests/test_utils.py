@@ -1,6 +1,6 @@
-import pytest
+from datetime import datetime, timedelta
 
-from datetime import UTC, datetime, timedelta
+import pytest
 
 from src.utils import (
     createAccessToken,
@@ -143,7 +143,6 @@ class TestGenerate6DigitCode:
 
 class TestNowPlusMinutes:
     def test_returns_future_datetime(self):
-        from datetime import datetime, timedelta
 
         result = nowPlusMinutes(30)
         assert isinstance(result, datetime)

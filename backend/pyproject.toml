@@ -26,6 +26,7 @@ ignore = [
     "E722",  # bare except - common pattern
     "S110",  # try-except-pass - common pattern
     "E501",  # line too long - subjective, not worth fixing in HTML templates
+    "E711",  # Column == None is SQLAlchemy's IS NULL form
 ]
 unfixable = ["B008", "BLE001", "E722", "S110", "E501"]
 

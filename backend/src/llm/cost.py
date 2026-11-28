@@ -14,7 +14,7 @@ def calculate_cost(
         return Decimal("0")
 
     cost = (
-        (Decimal(prompt_tokens) * input_cost_per_1m) +
-        (Decimal(completion_tokens) * output_cost_per_1m)
+        (Decimal(prompt_tokens) * input_cost_per_1m)
+        + (Decimal(completion_tokens) * output_cost_per_1m)
     ) / Decimal("1_000_000")
     return cost.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)

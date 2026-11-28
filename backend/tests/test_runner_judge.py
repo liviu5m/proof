@@ -10,6 +10,15 @@ def _make_mock_client(output_text='{"answer": "Paris"}'):
     """Build a mock provider whose .generate() returns an LLMResponse-like object."""
     mock_response = MagicMock()
     mock_response.text = output_text
+    mock_response.input_tokens = 1
+    mock_response.output_tokens = 1
+    mock_response.cost_usd = None
+    mock_response.cached_tokens = 0
+    mock_response.reasoning_tokens = 0
+    mock_response.latency_s = 0.0
+    mock_response.attempts = 1
+    mock_response.usage_estimated = False
+    mock_response.error = None
     mock_provider = MagicMock()
     mock_provider.generate = AsyncMock(return_value=mock_response)
     return mock_provider
@@ -179,7 +188,9 @@ class TestJudgeSingle:
             "min_words": 1,
             "max_words": 5,
         }
-        res = await judge_single(q, "gemini-3.5-flash-lite", mock_client)
+        res = await judge_single(
+            q, "gemini-3.5-flash-lite", mock_client, semantic_score=5.0
+        )
         assert res["score"] == 5.0
         assert res["reason"] == "Perfect match"
 
@@ -231,7 +242,9 @@ class TestJudgeSingle:
             "expected": '{"key": "value"}',
             "requires_json": "true",
         }
-        res = await judge_single(q, "gemini-3.5-flash-lite", mock_client)
+        res = await judge_single(
+            q, "gemini-3.5-flash-lite", mock_client, semantic_score=5.0
+        )
         assert res["score"] == 5.0
         assert res["reason"] == "good json"
         mock_client.generate.assert_called_once()
@@ -295,13 +308,22 @@ class TestJudgeSingle:
 
 class TestJudgeQuestions:
     @pytest.mark.asyncio
-    async def test_judge_questions_normalizes_results(self):
+    async def test_judge_questions_normalizes_results(self, monkeypatch):
+        async def no_embeddings(pairs):
+            return []
+
+        monkeypatch.setattr("src.judge.score_semantic_batch", no_embeddings)
         mock_client = _make_mock_client('{"score": 4.0, "reason": "good"}')
         data = [
             {"input": "Q1", "response": "A1", "expected": "A1"},
             {"input": "Q2", "response": "A2", "expected": "A2"},
         ]
-        results = await judge_questions(data, "gemini-3.5-flash-lite", mock_client)
+        results = await judge_questions(
+            data,
+            "gemini-3.5-flash-lite",
+            mock_client,
+            {"rule": 0, "llm": 1, "semantic": 0},
+        )
         assert len(results) == 2
         assert results[0]["score"] == 4.0
         assert results[1]["score"] == 4.0

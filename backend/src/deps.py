@@ -6,12 +6,13 @@ from .config import settings
 from .llm import PROVIDERS, LLMProviderConfig
 from .security import decrypt_api_key
 
+
 def get_llm_provider(
     provider: str,
     user_id: int | None = None,
     session=None,
     ollama_base_url: str | None = None,
-    model: str | None = None
+    model: str | None = None,
 ):
     """Returns an LLMProvider instance for the given provider name.
 

@@ -26,8 +26,12 @@ def _registry(session):
 
 def test_sequence_not_reused_after_soft_delete(session):
     registry = _registry(session)
-    first = PromptVersion(registry_id=registry.id, sequence=1, content_hash="a", content="a")
-    second = PromptVersion(registry_id=registry.id, sequence=2, content_hash="b", content="b")
+    first = PromptVersion(
+        registry_id=registry.id, sequence=1, content_hash="a", content="a"
+    )
+    second = PromptVersion(
+        registry_id=registry.id, sequence=2, content_hash="b", content="b"
+    )
     session.add(first)
     session.add(second)
     session.commit()
@@ -42,10 +46,18 @@ def test_sequence_not_reused_after_soft_delete(session):
 
 def test_duplicate_sequence_is_rejected(session):
     registry = _registry(session)
-    session.add(PromptVersion(registry_id=registry.id, sequence=1, content_hash="a", content="a"))
+    session.add(
+        PromptVersion(
+            registry_id=registry.id, sequence=1, content_hash="a", content="a"
+        )
+    )
     session.commit()
 
-    session.add(PromptVersion(registry_id=registry.id, sequence=1, content_hash="b", content="b"))
+    session.add(
+        PromptVersion(
+            registry_id=registry.id, sequence=1, content_hash="b", content="b"
+        )
+    )
     with pytest.raises(IntegrityError):
         session.commit()
     session.rollback()
